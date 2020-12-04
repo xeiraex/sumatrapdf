@@ -630,7 +630,7 @@ static void MenuUpdateStateForWindow(WindowInfo* win) {
                           tab && tab->selectionOnPage && win->showSelection && EngineSupportsAnnotations(engine));
 }
 
-void OnAboutContextMenu(WindowInfo* win, int x, int y) {
+void OnAboutContextMenu(WindowInfo* win, int x, int y, bool forget) {
     if (!HasPermission(Perm_SavePreferences | Perm_DiskAccess) || !gGlobalPrefs->rememberOpenedFiles ||
         !gGlobalPrefs->showStartPage) {
         return;
@@ -652,7 +652,7 @@ void OnAboutContextMenu(WindowInfo* win, int x, int y) {
     POINT pt = {x, y};
     MapWindowPoints(win->hwndCanvas, HWND_DESKTOP, &pt, 1);
     MarkMenuOwnerDraw(popup);
-    INT cmd = TrackPopupMenu(popup, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, win->hwndFrame, nullptr);
+    INT cmd = forget ? CmdForgetSelectedDocument : TrackPopupMenu(popup, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, win->hwndFrame, nullptr);
     FreeMenuOwnerDrawInfoData(popup);
     DestroyMenu(popup);
 

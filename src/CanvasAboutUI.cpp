@@ -126,12 +126,12 @@ static void OnMouseRightButtonDownAbout(WindowInfo* win, int x, int y, [[maybe_u
     win->dragStart = Point(x, y);
 }
 
-static void OnMouseRightButtonUpAbout(WindowInfo* win, int x, int y, [[maybe_unused]] WPARAM key) {
+static void OnMouseRightButtonUpAbout(WindowInfo* win, int x, int y, [[maybe_unused]] WPARAM key, bool forget) {
     int isDrag = IsDrag(x, win->dragStart.x, y, win->dragStart.y);
     if (isDrag) {
         return;
     }
-    OnAboutContextMenu(win, x, y);
+    OnAboutContextMenu(win, x, y, forget);
 }
 
 static LRESULT OnSetCursorAbout(WindowInfo* win, HWND hwnd) {
@@ -155,6 +155,7 @@ static LRESULT OnSetCursorAbout(WindowInfo* win, HWND hwnd) {
 LRESULT WndProcCanvasAbout(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     int x = GET_X_LPARAM(lp);
     int y = GET_Y_LPARAM(lp);
+    bool forget = false;
     switch (msg) {
         case WM_LBUTTONDOWN:
             OnMouseLeftButtonDownAbout(win, x, y, wp);
@@ -168,12 +169,15 @@ LRESULT WndProcCanvasAbout(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, LPAR
             OnMouseLeftButtonDownAbout(win, x, y, wp);
             return 0;
 
+        case WM_MBUTTONDOWN:
         case WM_RBUTTONDOWN:
             OnMouseRightButtonDownAbout(win, x, y, wp);
             return 0;
 
+        case WM_MBUTTONUP:
+            forget = true;
         case WM_RBUTTONUP:
-            OnMouseRightButtonUpAbout(win, x, y, wp);
+            OnMouseRightButtonUpAbout(win, x, y, wp, forget);
             return 0;
 
         case WM_SETCURSOR:
