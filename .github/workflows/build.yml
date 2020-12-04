@@ -31,6 +31,12 @@ jobs:
           CERT_PWD: ${{ secrets.CERT_PWD }}
         run: .\doit.bat -ci
 
+      - name: Upload Executable Artefact
+        uses: actions/upload-artifact@v2.2.1
+        with:
+          name: executable
+          path: out/rel64/SumatraPDF-dll.exe
+
       # a separate step from -ci to make logs easier to read
       - name: Upload to s3 etc.
         env:
