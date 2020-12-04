@@ -541,7 +541,6 @@ static void GetProps(Controller* ctrl, PropertiesLayout* layoutData, [[maybe_unu
     str = FormatPermissions(ctrl);
     layoutData->AddProperty(_TR("Denied Permissions:"), str);
 
-#if defined(DEBUG) || defined(ENABLE_EXTENDED_PROPERTIES)
     if (extended) {
         // TODO: FontList extraction can take a while
         str = ctrl->GetProperty(DocumentProperty::FontList);
@@ -551,7 +550,6 @@ static void GetProps(Controller* ctrl, PropertiesLayout* layoutData, [[maybe_unu
         }
         layoutData->AddProperty(_TR("Fonts:"), str);
     }
-#endif
 }
 
 static void ShowProperties(HWND parent, Controller* ctrl, bool extended = false) {
@@ -655,7 +653,6 @@ static void PropertiesOnCommand(HWND hwnd, WPARAM wp) {
             break;
 
         case CmdProperties:
-#if defined(DEBUG) || defined(ENABLE_EXTENDED_PROPERTIES)
             // make a repeated Ctrl+D display some extended properties
             // TODO: expose this through a UI button or similar
             PropertiesLayout* pl = FindPropertyWindowByHwnd(hwnd);
@@ -666,7 +663,6 @@ static void PropertiesOnCommand(HWND hwnd, WPARAM wp) {
                     ShowProperties(win->hwndFrame, win->ctrl, true);
                 }
             }
-#endif
             break;
     }
 }
