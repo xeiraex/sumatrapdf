@@ -979,7 +979,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstan
         // TODO: pass print request through to previous instance?
     } else if (i.reuseDdeInstance) {
         hPrevWnd = FindWindow(FRAME_CLASS_NAME, nullptr);
-    } else if (gGlobalPrefs->reuseInstance || gGlobalPrefs->useTabs) {
+    } else if (gGlobalPrefs->reuseInstance) {
         hPrevWnd = FindPrevInstWindow(&hMutex);
     }
     if (hPrevWnd) {
