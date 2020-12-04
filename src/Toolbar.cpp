@@ -35,6 +35,7 @@
 #include "Translations.h"
 #include "SvgIcons.h"
 #include "SumatraConfig.h"
+#include "Favorites.h"
 
 // https://docs.microsoft.com/en-us/windows/win32/controls/toolbar-control-reference
 
@@ -57,6 +58,8 @@ struct ToolbarButtonInfo {
 };
 
 static ToolbarButtonInfo gToolbarButtons[] = {
+    {13, CmdFavoriteToggle, _TRN("Favorites"), 0},
+    {14, CmdViewBookmarks, _TRN("Bookmarks"), 0},
     {0, CmdOpen, _TRN("Open"), MF_REQ_DISK_ACCESS},
     // the Open button is replaced with a Save As button in Plugin mode:
     //  { 12,  IDM_SAVEAS,            _TRN("Save As"),        MF_REQ_DISK_ACCESS },
@@ -106,12 +109,18 @@ static bool IsToolbarButtonEnabled(WindowInfo* win, int buttonNo) {
         return false;
     }
 
-    // If no file open, only enable open button
+    // If no file open, only enable open and favorites buttons
     if (!win->IsDocLoaded()) {
-        return CmdOpen == cmdId;
+        return cmdId == CmdOpen || (cmdId == CmdFavoriteToggle && HasFavorites());
     }
 
     switch (cmdId) {
+        case CmdFavoriteToggle:
+            return HasFavorites();
+
+        case CmdViewBookmarks:
+            return win->ctrl->HacToc();
+
         case CmdOpen:
             // opening different files isn't allowed in plugin mode
             return !gPluginMode;

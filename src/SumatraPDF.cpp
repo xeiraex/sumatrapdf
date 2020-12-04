@@ -4192,6 +4192,20 @@ void SetSidebarVisibility(WindowInfo* win, bool tocVisible, bool showFavorites) 
     win->favSplitter->isLive = !win->AsEbook();
 
     RelayoutFrame(win, false);
+
+    WORD state = (WORD)SendMessage(win->hwndToolbar, TB_GETSTATE, CmdFavoriteToggle, 0);
+    if (gGlobalPrefs->showFavorites)
+        state |= TBSTATE_CHECKED;
+    else
+        state &= ~TBSTATE_CHECKED;
+    SendMessage(win->hwndToolbar, TB_SETSTATE, CmdFavoriteToggle, state);
+
+    state = (WORD)SendMessage(win->hwndToolbar, TB_GETSTATE, CmdViewBookmarks, 0);
+    if (win->tocVisible)
+        state |= TBSTATE_CHECKED;
+    else
+        state &= ~TBSTATE_CHECKED;
+    SendMessage(win->hwndToolbar, TB_SETSTATE, CmdViewBookmarks, state);
 }
 
 // Tests that various ways to crash will generate crash report.
