@@ -633,13 +633,13 @@ void DrawAboutPage(WindowInfo* win, HDC hdc) {
 
 #define DOCLIST_SEPARATOR_DY 2
 #define DOCLIST_THUMBNAIL_BORDER_W 1
-#define DOCLIST_MARGIN_LEFT DpiScale(win->hwndFrame, 40)
-#define DOCLIST_MARGIN_BETWEEN_X DpiScale(win->hwndFrame, 30)
-#define DOCLIST_MARGIN_RIGHT DpiScale(win->hwndFrame, 40)
-#define DOCLIST_MARGIN_TOP DpiScale(win->hwndFrame, 60)
-#define DOCLIST_MARGIN_BETWEEN_Y DpiScale(win->hwndFrame, 50)
-#define DOCLIST_MARGIN_BOTTOM DpiScale(win->hwndFrame, 40)
-#define DOCLIST_MAX_THUMBNAILS_X 5
+#define DOCLIST_MARGIN_LEFT DpiScale(win->hwndFrame, 15)
+#define DOCLIST_MARGIN_BETWEEN_X DpiScale(win->hwndFrame, 15)
+#define DOCLIST_MARGIN_RIGHT DpiScale(win->hwndFrame, 15)
+#define DOCLIST_MARGIN_TOP DpiScale(win->hwndFrame, 15)
+#define DOCLIST_MARGIN_BETWEEN_Y DpiScale(win->hwndFrame, 35)
+#define DOCLIST_MARGIN_BOTTOM DpiScale(win->hwndFrame, 25)
+#define DOCLIST_MAX_THUMBNAILS_X 8
 #define DOCLIST_BOTTOM_BOX_DY DpiScale(win->hwndFrame, 50)
 
 void DrawStartPage(WindowInfo* win, HDC hdc, FileHistory& fileHistory, COLORREF textColor, COLORREF backgroundColor) {
@@ -670,20 +670,12 @@ void DrawStartPage(WindowInfo* win, HDC hdc, FileHistory& fileHistory, COLORREF 
 
     bool isRtl = IsUIRightToLeft();
 
-    /* render title */
-    Rect titleBox = Rect(Point(0, 0), CalcSumatraVersionSize(win->hwndCanvas, hdc));
-    titleBox.x = rc.dx - titleBox.dx - 3;
-    DrawSumatraVersion(win->hwndCanvas, hdc, titleBox);
-    PaintLine(hdc, Rect(0, titleBox.dy, rc.dx, 0));
-
     /* render recent files list */
     SelectObject(hdc, penThumbBorder);
     SetBkMode(hdc, TRANSPARENT);
     col = GetAppColor(AppColor::MainWindowText);
     SetTextColor(hdc, col);
 
-    rc.y += titleBox.dy;
-    rc.dy -= titleBox.dy;
     rTmp = ToRECT(rc);
     col = GetAppColor(AppColor::MainWindowBg);
     ScopedGdiObj<HBRUSH> brushAboutBg(CreateSolidBrush(col));
@@ -711,15 +703,6 @@ void DrawStartPage(WindowInfo* win, HDC hdc, FileHistory& fileHistory, COLORREF 
     }
 
     SelectObject(hdc, fontFrequentlyRead);
-    SIZE txtSize;
-    const WCHAR* txt = _TR("Frequently Read");
-    GetTextExtentPoint32(hdc, txt, (int)str::Len(txt), &txtSize);
-    Rect headerRect(offset.x, rc.y + (DOCLIST_MARGIN_TOP - txtSize.cy) / 2, txtSize.cx, txtSize.cy);
-    if (isRtl) {
-        headerRect.x = rc.dx - offset.x - headerRect.dx;
-    }
-    rTmp = ToRECT(headerRect);
-    DrawText(hdc, txt, -1, &rTmp, (isRtl ? DT_RTLREADING : DT_LEFT) | DT_NOPREFIX);
 
     SelectObject(hdc, fontLeftTxt);
     SelectObject(hdc, GetStockBrush(NULL_BRUSH));
@@ -802,25 +785,6 @@ void DrawStartPage(WindowInfo* win, HDC hdc, FileHistory& fileHistory, COLORREF 
     }
     ImageList_Draw(himl, 0 /* index of Open icon */, hdc, rectIcon.x, rectIcon.y, ILD_NORMAL);
 
-    txt = _TR("Open a document...");
-    GetTextExtentPoint32(hdc, txt, (int)str::Len(txt), &txtSize);
-    Rect rect(offset.x + rectIcon.dx + 3, rc.y + (rc.dy - txtSize.cy) / 2, txtSize.cx, txtSize.cy);
-    if (isRtl) {
-        rect.x = rectIcon.x - rect.dx - 3;
-    }
-    rTmp = ToRECT(rect);
-    DrawText(hdc, txt, -1, &rTmp, isRtl ? DT_RTLREADING : DT_LEFT);
-    PaintLine(hdc, Rect(rect.x, rect.y + rect.dy, rect.dx, 0));
-    // make the click target larger
-    rect = rect.Union(rectIcon);
-    rect.Inflate(10, 10);
-    win->staticLinks.Append(StaticLinkInfo(rect, SLINK_OPEN_FILE));
-
-    rect = DrawHideFrequentlyReadLink(win->hwndCanvas, hdc, _TR("Hide frequently read"));
+    Rect rect = DrawHideFrequentlyReadLink(win->hwndCanvas, hdc, _TR("Hide frequently read"));
     win->staticLinks.Append(StaticLinkInfo(rect, SLINK_LIST_HIDE));
-
-    if (!gIsRaMicroBuild) {
-        rect = DrawSupportLink(win->hwndCanvas, hdc, _TR("Support SumatraPDF"));
-        win->staticLinks.Append(StaticLinkInfo(rect, URL_SUPPORT_SUMATRA));
-    }
 }
