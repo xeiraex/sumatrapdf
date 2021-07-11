@@ -1003,10 +1003,10 @@ int APIENTRY WinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstan
         // TODO: pass print request through to previous instance?
     } else if (i.reuseDdeInstance) {
         hPrevWnd = FindWindow(FRAME_CLASS_NAME, nullptr);
-    } else if (gGlobalPrefs->reuseInstance) {
+    } else if (gGlobalPrefs->reuseInstance || gGlobalPrefs->restoreSession) {
         hPrevWnd = FindPrevInstWindow(&hMutex);
     }
-    if (hPrevWnd) {
+    if ((i.reuseDdeInstance || gGlobalPrefs->reuseInstance) && hPrevWnd) {
         DWORD otherProcId = 1;
         GetWindowThreadProcessId(hPrevWnd, &otherProcId);
         if (!CanTalkToProcess(otherProcId)) {
@@ -1026,10 +1026,10 @@ int APIENTRY WinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstan
         goto Exit;
     }
 
-    if (gGlobalPrefs->sessionData->size() > 0 && !gPluginURL) {
+    if (gGlobalPrefs->sessionData->size() > 0 && !gPluginURL && !hPrevWnd) {
         restoreSession = gGlobalPrefs->restoreSession;
     }
-    if (gGlobalPrefs->reopenOnce->size() > 0 && !gPluginURL) {
+    if (gGlobalPrefs->reopenOnce->size() > 0 && !gPluginURL && !hPrevWnd) {
         if (gGlobalPrefs->reopenOnce->size() == 1 && str::EqI(gGlobalPrefs->reopenOnce->at(0), "SessionData")) {
             gGlobalPrefs->reopenOnce->FreeMembers();
             restoreSession = true;
