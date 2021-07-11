@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -545,7 +545,7 @@ bool MobiDoc::ParseHeader() {
         compressionType = COMPRESSION_UNSUPPORTED_DRM;
         Metadata prop;
         prop.prop = DocumentProperty::UnsupportedFeatures;
-        auto tmp = strconv::WstrToCodePage(L"DRM", mobiHdr.textEncoding);
+        auto tmp = strconv::WstrToCodePageV(mobiHdr.textEncoding, L"DRM");
         prop.value = (char*)tmp.data();
         props.Append(prop);
     }
@@ -560,7 +560,7 @@ bool MobiDoc::ParseHeader() {
             imagesCount = pdbReader->GetRecordCount() - imageFirstRec;
         }
     }
-    if (kPalmDocHeaderLen + mobiHdr.hdrLen > recSize) {
+    if (kPalmDocHeaderLen + (size_t)mobiHdr.hdrLen > recSize) {
         logf("MobiHeader too big\n");
         return false;
     }
@@ -673,7 +673,7 @@ bool MobiDoc::DecodeExthHeader(const u8* data, size_t dataLen) {
             default:
                 continue;
         }
-        prop.value = str::DupN((char*)(data + d.Offset() - length + 8), length - 8);
+        prop.value = str::Dup((char*)(data + d.Offset() - length + 8), length - 8);
         if (prop.value) {
             props.Append(prop);
         }
@@ -713,7 +713,7 @@ static bool KnownNonImageRec(std::span<u8> d) {
 }
 
 static bool KnownImageFormat(std::span<u8> d) {
-    return ImgFormat::Unknown != GfxFormatFromData(d);
+    return nullptr != GuessFileTypeFromContent(d);
 }
 
 // return false if we should stop loading images (because we
@@ -888,7 +888,7 @@ bool MobiDoc::LoadDocument(PdbReader* pdbReader) {
         *s = ' ';
     }
     if (textEncoding != CP_UTF8) {
-        const char* docUtf8 = strconv::ToMultiByte(doc->Get(), textEncoding, CP_UTF8).data();
+        const char* docUtf8 = strconv::ToMultiByteV(doc->Get(), textEncoding, CP_UTF8).data();
         if (docUtf8) {
             doc->Reset();
             doc->AppendAndFree(docUtf8);

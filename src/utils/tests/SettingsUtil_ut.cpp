@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -52,8 +52,8 @@ struct SutStruct {
     char* nullUtf8String;
     char* escapedUtf8String;
     Vec<int>* intArray;
-    Vec<WCHAR*>* strArray;
-    Vec<WCHAR*>* emptyStrArray;
+    Vec<char*>* strArray;
+    Vec<char*>* emptyStrArray;
     Point point;
     Vec<SutStructItem*>* sutStructItems;
     char* internalString;
@@ -72,8 +72,8 @@ static const FieldInfo gSutStructFields[] = {
     {offsetof(SutStruct, nullUtf8String), SettingType::Utf8String, 0},
     {offsetof(SutStruct, escapedUtf8String), SettingType::Utf8String, (intptr_t) "$\nstring "},
     {offsetof(SutStruct, intArray), SettingType::IntArray, (intptr_t) "1 2 -3"},
-    {offsetof(SutStruct, strArray), SettingType::StringArray, (intptr_t) "one \"two three\" \"\""},
-    {offsetof(SutStruct, emptyStrArray), SettingType::StringArray, 0},
+    {offsetof(SutStruct, strArray), SettingType::Utf8StringArray, (intptr_t) "one \"two three\" \"\""},
+    {offsetof(SutStruct, emptyStrArray), SettingType::Utf8StringArray, 0},
     {offsetof(SutStruct, point), SettingType::Struct, (intptr_t)&gSutPointIInfo},
     {(size_t)-1, SettingType::Comment, 0},
     {offsetof(SutStruct, sutStructItems), SettingType::Array, (intptr_t)&gSutStructItemInfo},
@@ -161,8 +161,8 @@ Key = Value";
     utassert(str::Eq(data->escapedUtf8String, "\r\n[]\t"));
     utassert(2 == data->intArray->size() && 3 == data->intArray->at(0));
     utassert(3 == data->strArray->size() && 0 == data->emptyStrArray->size());
-    utassert(str::Eq(data->strArray->at(0), L"with space") && str::Eq(data->strArray->at(1), L"plain") &&
-             str::Eq(data->strArray->at(2), L"quote:\""));
+    utassert(str::Eq(data->strArray->at(0), "with space") && str::Eq(data->strArray->at(1), "plain") &&
+             str::Eq(data->strArray->at(2), "quote:\""));
     utassert(2 == data->sutStructItems->size());
     utassert(Point(-1, 5) == data->sutStructItems->at(0)->compactPoint);
     utassert(2 == data->sutStructItems->at(0)->floatArray->size());
@@ -193,10 +193,10 @@ Key = Value";
     utassert(data->emptyStrArray);
     utassert(3 == data->strArray->size());
     utassert(0 == data->emptyStrArray->size());
-    Vec<WCHAR*>* sa = data->strArray;
-    utassert(str::Eq(sa->at(0), L"one"));
-    utassert(str::Eq(sa->at(1), L"two three"));
-    utassert(str::Eq(sa->at(2), L""));
+    Vec<char*>* sa = data->strArray;
+    utassert(str::Eq(sa->at(0), "one"));
+    utassert(str::Eq(sa->at(1), "two three"));
+    utassert(str::Eq(sa->at(2), ""));
 
     utassert(Point(111, 222) == data->point);
     utassert(data->sutStructItems && 0 == data->sutStructItems->size());

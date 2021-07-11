@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -21,6 +21,176 @@
 #include "SumatraPDF.h"
 #include "TabInfo.h"
 #include "ExternalViewers.h"
+#include "Commands.h"
+
+struct ExternalViewerInfo {
+    const char* name; // shown to the user
+    int cmd;
+    const WCHAR* exts; // valid extensions
+    const WCHAR* exePartialPath;
+    const WCHAR* launchArgs;
+    Kind engineKind;
+    // set by DetectExternalViewers()
+    const WCHAR* exeFullPath; // if found, full path to the executable
+};
+
+// kindEngineChm
+
+static int gExternalViewersCount{0};
+
+// clang-format off
+static ExternalViewerInfo gExternalViewers[] = {
+    // it's no longer installed by default in win 10
+    {
+        "Acrobat Reader",
+        CmdOpenWithAcrobat,
+        L".pdf",
+        L"Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe",
+        // Command line format for version 6 and later:
+        //   /A "page=%d&zoom=%.1f,%d,%d&..." <filename>
+        // see http://www.adobe.com/devnet/acrobat/pdfs/pdf_open_parameters.pdf#page=5
+        //   /P <filename>
+        // see http://www.adobe.com/devnet/acrobat/pdfs/Acrobat_SDK_developer_faq.pdf#page=24
+        // TODO: Also set zoom factor and scroll to current position?
+        L"/A page=%p \"%1\"",
+        kindEnginePdf,
+        nullptr
+    },
+    {
+        "Foxit Reader",
+        CmdOpenWithFoxIt,
+        L".pdf",
+        L"Foxit Software\\Foxit Reader\\FoxitReader.exe",
+        // Foxit cmd-line format:
+        // [PDF filename] [-n <page number>] [-pwd <password>] [-z <zoom>]
+        // TODO: Foxit allows passing password and zoom
+        L"\"%1\" /A page=%p",
+        kindEnginePdf,
+        nullptr
+    },
+    {
+        "Foxit PhantomPDF",
+        CmdOpenWithFoxItPhantom,
+        L".pdf",
+        L"Foxit Software\\Foxit PhantomPDF\\FoxitPhantomPDF.exe",
+        L"\"%1\" /A page=%p",
+        kindEnginePdf,
+        nullptr
+    },
+    {
+        "PDF-XChange Editor",
+        CmdOpenWithPdfXchange,
+        L".pdf",
+        L"Tracker Software\\PDF Editor\\PDFXEdit.exe",
+        // PDFXChange cmd-line format:
+        // [/A "param=value [&param2=value ..."] [PDF filename]
+        // /A params: page=<page number>
+        L"/A page=%p \"%1\"",
+        kindEnginePdf,
+        nullptr
+    },
+    {
+        "Pdf & Djvu Bookmarker",
+        CmdOpenWithPdfDjvuBookmarker,
+        L".pdf;.djvu",
+        L"Pdf & Djvu Bookmarker\\PdfDjvuBookmarker.exe",
+        nullptr,
+        nullptr,
+        nullptr
+    },
+    {
+        "XPS Viewer",
+        CmdOpenWithXpsViewer,
+        L".xps;.oxps",
+        L"xpsrchvw.exe",
+        nullptr,
+        kindEngineXps,
+        nullptr
+    },
+    {
+        "HTML Help",
+        CmdOpenWithHtmlHelp,
+        L".chm",
+        L"hh.exe",
+        nullptr,
+        kindEngineChm,
+        nullptr
+    },
+};
+// clang-format on
+
+static ExternalViewerInfo* FindExternalViewerInfoByCmd(int cmd) {
+    int n = dimof(gExternalViewers);
+    for (int i = 0; i < n; i++) {
+        ExternalViewerInfo* info = &gExternalViewers[i];
+        if (info->cmd == cmd) {
+            return info;
+        }
+    }
+    CrashMe();
+    return nullptr;
+}
+
+static bool CanViewExternally(TabInfo* tab) {
+    if (!HasPermission(Perm::DiskAccess)) {
+        return false;
+    }
+    // if tab is nullptr, we're queried for the
+    // About window with disabled menu items
+    if (!tab) {
+        return true;
+    }
+    return file::Exists(tab->filePath);
+}
+
+static bool DetectExternalViewer(ExternalViewerInfo* info) {
+    {
+        AutoFreeWstr dir = GetSpecialFolder(CSIDL_PROGRAM_FILES);
+        WCHAR* path = path::Join(dir, info->exePartialPath);
+        if (file::Exists(path)) {
+            info->exeFullPath = path;
+            return true;
+        }
+        str::Free(path);
+    }
+    {
+        AutoFreeWstr dir = GetSpecialFolder(CSIDL_PROGRAM_FILESX86);
+        WCHAR* path = path::Join(dir, info->exePartialPath);
+        if (file::Exists(path)) {
+            info->exeFullPath = path;
+            return true;
+        }
+        str::Free(path);
+    }
+    {
+        AutoFreeWstr dir = GetSpecialFolder(CSIDL_WINDOWS);
+        WCHAR* path = path::Join(dir, info->exePartialPath);
+        if (file::Exists(path)) {
+            info->exeFullPath = path;
+            return true;
+        }
+        str::Free(path);
+    }
+    {
+        AutoFreeWstr dir = GetSpecialFolder(CSIDL_SYSTEM);
+        WCHAR* path = path::Join(dir, info->exePartialPath);
+        if (file::Exists(path)) {
+            info->exeFullPath = path;
+            return true;
+        }
+        str::Free(path);
+    }
+
+    return false;
+}
+
+void FreeExternalViewers() {
+    int n = dimof(gExternalViewers);
+    for (int i = 0; i < n; i++) {
+        ExternalViewerInfo* info = &gExternalViewers[i];
+        str::FreePtr(&info->exeFullPath);
+    }
+}
 
 static WCHAR* GetAcrobatPath() {
     // Try Adobe Acrobat as a fall-back, if the Reader isn't installed
@@ -74,67 +244,59 @@ static WCHAR* GetPDFXChangePath() {
     return nullptr;
 }
 
-static WCHAR* GetXPSViewerPath() {
-    // the XPS-Viewer seems to always be installed into %WINDIR%\system32
-    WCHAR buffer[MAX_PATH];
-    uint res = GetSystemDirectory(buffer, dimof(buffer));
-    if (!res || res >= dimof(buffer)) {
-        return nullptr;
-    }
-    AutoFreeWstr exePath(path::Join(buffer, L"xpsrchvw.exe"));
-    if (file::Exists(exePath)) {
-        return exePath.StealData();
-    }
-#ifndef _WIN64
-    // Wow64 redirects access to system32 to syswow64 instead, so we
-    // disable file system redirection using the recommended method from
-    // http://msdn.microsoft.com/en-us/library/aa384187(v=vs.85).aspx
-    if (IsRunningInWow64()) {
-        res = GetWindowsDirectory(buffer, dimof(buffer));
-        if (!res || res >= dimof(buffer)) {
-            return nullptr;
-        }
-        exePath.Set(path::Join(buffer, L"Sysnative\\xpsrchvw.exe"));
-        if (file::Exists(exePath)) {
-            return exePath.StealData();
+void DetectExternalViewers() {
+    CrashIf(gExternalViewersCount > 0); // only call once
+
+    ExternalViewerInfo* info{nullptr};
+    int n = dimof(gExternalViewers);
+    for (int i = 0; i < n; i++) {
+        info = &gExternalViewers[i];
+        bool didDetect = DetectExternalViewer(info);
+        if (didDetect) {
+            gExternalViewersCount++;
         }
     }
-#endif
-    return nullptr;
+
+    info = FindExternalViewerInfoByCmd(CmdOpenWithAcrobat);
+    if (!info->exeFullPath) {
+        info->exeFullPath = GetAcrobatPath();
+    }
+
+    info = FindExternalViewerInfoByCmd(CmdOpenWithFoxIt);
+    if (!info->exeFullPath) {
+        info->exeFullPath = GetFoxitPath();
+    }
+
+    info = FindExternalViewerInfoByCmd(CmdOpenWithPdfXchange);
+    if (!info->exeFullPath) {
+        info->exeFullPath = GetPDFXChangePath();
+    }
 }
 
-static WCHAR* GetHtmlHelpPath() {
-    // the Html Help viewer seems to be installed either into %WINDIR% or %WINDIR%\system32
-    WCHAR buffer[MAX_PATH];
-    uint res = GetWindowsDirectory(buffer, dimof(buffer));
-    if (!res || res >= dimof(buffer)) {
-        return nullptr;
-    }
-    AutoFreeWstr exePath = path::Join(buffer, L"hh.exe");
-    if (file::Exists(exePath)) {
-        return exePath.StealData();
-    }
-    res = GetSystemDirectory(buffer, dimof(buffer));
-    if (!res || res >= dimof(buffer)) {
-        return nullptr;
-    }
-    exePath.Set(path::Join(buffer, L"hh.exe"));
-    if (file::Exists(exePath)) {
-        return exePath.StealData();
-    }
-    return nullptr;
-}
-
-static bool CanViewExternally(TabInfo* tab) {
-    if (!HasPermission(Perm_DiskAccess)) {
+bool CanViewWithKnownExternalViewer(TabInfo* tab, int cmd) {
+    if (!tab || !CanViewExternally(tab)) {
         return false;
     }
-    // if tab is nullptr, we're queried for the
-    // About window with disabled menu items
-    if (!tab) {
-        return true;
+    ExternalViewerInfo* info = FindExternalViewerInfoByCmd(cmd);
+    if (!info || info->exeFullPath == nullptr) {
+        return false;
     }
-    return file::Exists(tab->filePath);
+    // must match file extension
+    const WCHAR* filePath = tab->filePath.Get();
+    const WCHAR* ext = path::GetExtNoFree(filePath);
+    const WCHAR* pos = str::FindI(info->exts, ext);
+    if (!pos) {
+        return false;
+    }
+    Kind engineKind = tab->GetEngineType();
+    if (engineKind != nullptr) {
+        if (info->engineKind != nullptr) {
+            if (info->engineKind != engineKind) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 bool CouldBePDFDoc(TabInfo* tab) {
@@ -142,220 +304,13 @@ bool CouldBePDFDoc(TabInfo* tab) {
     return !tab || !tab->ctrl || tab->GetEngineType() == kindEnginePdf;
 }
 
-bool CanViewWithFoxit(TabInfo* tab) {
-    // Requirements: a valid filename and a valid path to Foxit
-    if (!CouldBePDFDoc(tab) || !CanViewExternally(tab)) {
-        return false;
-    }
-    AutoFreeWstr path = GetFoxitPath();
-    return path != nullptr;
-}
-
-bool ViewWithFoxit(TabInfo* tab, const WCHAR* args) {
-    if (!tab || !CanViewWithFoxit(tab)) {
-        return false;
-    }
-
-    AutoFreeWstr exePath(GetFoxitPath());
-    if (!exePath) {
-        return false;
-    }
-    if (!args) {
-        args = L"";
-    }
-
-    // Foxit cmd-line format:
-    // [PDF filename] [-n <page number>] [-pwd <password>] [-z <zoom>]
-    // TODO: Foxit allows passing password and zoom
-    AutoFreeWstr params;
-    if (tab->ctrl) {
-        params.Set(str::Format(L"\"%s\" %s -n %d", tab->ctrl->FilePath(), args, tab->ctrl->CurrentPageNo()));
-    } else {
-        params.Set(str::Format(L"\"%s\" %s", tab->filePath.Get(), args));
-    }
-    return LaunchFile(exePath, params);
-}
-
-bool CanViewWithPDFXChange(TabInfo* tab) {
-    // Requirements: a valid filename and a valid path to PDF X-Change
-    if (!CouldBePDFDoc(tab) || !CanViewExternally(tab)) {
-        return false;
-    }
-    AutoFreeWstr path = GetPDFXChangePath();
-    return path != nullptr;
-}
-
-bool ViewWithPDFXChange(TabInfo* tab, const WCHAR* args) {
-    if (!tab || !CanViewWithPDFXChange(tab)) {
-        return false;
-    }
-
-    AutoFreeWstr exePath(GetPDFXChangePath());
-    if (!exePath) {
-        return false;
-    }
-    if (!args) {
-        args = L"";
-    }
-
-    // PDFXChange cmd-line format:
-    // [/A "param=value [&param2=value ..."] [PDF filename]
-    // /A params: page=<page number>
-    AutoFreeWstr params;
-    if (tab->ctrl) {
-        params.Set(str::Format(L"%s /A \"page=%d\" \"%s\"", args, tab->ctrl->CurrentPageNo(), tab->ctrl->FilePath()));
-    } else {
-        params.Set(str::Format(L"%s \"%s\"", args, tab->filePath.Get()));
-    }
-    return LaunchFile(exePath, params);
-}
-
-bool CanViewWithAcrobat(TabInfo* tab) {
-    // Requirements: a valid filename and a valid path to Adobe Reader
-    if (!CouldBePDFDoc(tab) || !CanViewExternally(tab)) {
-        return false;
-    }
-    AutoFreeWstr exePath = GetAcrobatPath();
-    return exePath != nullptr;
-}
-
-bool ViewWithAcrobat(TabInfo* tab, const WCHAR* args) {
-    if (!tab || !CanViewWithAcrobat(tab)) {
-        return false;
-    }
-
-    AutoFreeWstr exePath = GetAcrobatPath();
-    if (!exePath) {
-        return false;
-    }
-
-    if (!args) {
-        args = L"";
-    }
-
-    AutoFreeWstr params;
-    // Command line format for version 6 and later:
-    //   /A "page=%d&zoom=%.1f,%d,%d&..." <filename>
-    // see http://www.adobe.com/devnet/acrobat/pdfs/pdf_open_parameters.pdf#page=5
-    //   /P <filename>
-    // see http://www.adobe.com/devnet/acrobat/pdfs/Acrobat_SDK_developer_faq.pdf#page=24
-    // TODO: Also set zoom factor and scroll to current position?
-    if (tab->ctrl && HIWORD(GetFileVersion(exePath)) >= 6) {
-        params.Set(str::Format(L"/A \"page=%d\" %s \"%s\"", tab->ctrl->CurrentPageNo(), args, tab->ctrl->FilePath()));
-    } else {
-        params.Set(str::Format(L"%s \"%s\"", args, tab->filePath.Get()));
-    }
-
-    return LaunchFile(exePath, params);
-}
-
-bool CanViewWithXPSViewer(TabInfo* tab) {
-    // Requirements: a valid filename and a valid path to XPS-Viewer
-    if (!tab || !CanViewExternally(tab)) {
-        return false;
-    }
-    // allow viewing with XPS-Viewer, if either an XPS document is loaded...
-    if (tab->ctrl && tab->GetEngineType() != kindEngineXps) {
-        return false;
-    }
-    // or a file ending in .xps or .oxps has failed to be loaded
-    if (!tab->ctrl && !str::EndsWithI(tab->filePath, L".xps") && !str::EndsWithI(tab->filePath, L".oxps")) {
-        return false;
-    }
-    AutoFreeWstr path = GetXPSViewerPath();
-    return path != nullptr;
-}
-
-bool ViewWithXPSViewer(TabInfo* tab, const WCHAR* args) {
-    if (!tab || !CanViewWithXPSViewer(tab)) {
-        return false;
-    }
-
-    AutoFreeWstr exePath = GetXPSViewerPath();
-    if (!exePath) {
-        return false;
-    }
-
-    if (!args) {
-        args = L"";
-    }
-
-    AutoFreeWstr params;
-    if (tab->ctrl) {
-        params.Set(str::Format(L"%s \"%s\"", args, tab->ctrl->FilePath()));
-    } else {
-        params.Set(str::Format(L"%s \"%s\"", args, tab->filePath.Get()));
-    }
-    return LaunchFile(exePath, params);
-}
-
-bool CanViewWithHtmlHelp(TabInfo* tab) {
-    // Requirements: a valid filename and a valid path to HTML Help
-    if (!tab || !CanViewExternally(tab)) {
-        return false;
-    }
-    // allow viewing with HTML Help, if either an CHM document is loaded...
-    if (tab->ctrl && tab->GetEngineType() != kindEngineChm && !tab->AsChm()) {
-        return false;
-    }
-    // or a file ending in .chm has failed to be loaded
-    if (!tab->ctrl && !str::EndsWithI(tab->filePath, L".chm")) {
-        return false;
-    }
-    AutoFreeWstr path = GetHtmlHelpPath();
-    return path != nullptr;
-}
-
-bool ViewWithHtmlHelp(TabInfo* tab, const WCHAR* args) {
-    if (!tab || !CanViewWithHtmlHelp(tab)) {
-        return false;
-    }
-
-    AutoFreeWstr exePath = GetHtmlHelpPath();
-    if (!exePath) {
-        return false;
-    }
-
-    if (!args) {
-        args = L"";
-    }
-
-    AutoFreeWstr params;
-    if (tab->ctrl) {
-        params.Set(str::Format(L"%s \"%s\"", args, tab->ctrl->FilePath()));
-    } else {
-        params.Set(str::Format(L"%s \"%s\"", args, tab->filePath.Get()));
-    }
-    return LaunchFile(exePath, params);
-}
-
-bool ViewWithExternalViewer(TabInfo* tab, size_t idx) {
-    if (!HasPermission(Perm_DiskAccess) || !tab || !file::Exists(tab->filePath)) {
-        return false;
-    }
-
-    for (size_t i = 0; i < gGlobalPrefs->externalViewers->size() && i <= idx; i++) {
-        ExternalViewer* ev = gGlobalPrefs->externalViewers->at(i);
-        // cf. AppendExternalViewersToMenu in Menu.cpp
-        if (!ev->commandLine || ev->filter && !str::Eq(ev->filter, L"*") && !path::Match(tab->filePath, ev->filter)) {
-            idx++;
-        }
-    }
-    if (idx >= gGlobalPrefs->externalViewers->size() || !gGlobalPrefs->externalViewers->at(idx)->commandLine) {
-        return false;
-    }
-
-    ExternalViewer* ev = gGlobalPrefs->externalViewers->at(idx);
-    WStrVec args;
-    ParseCmdLine(ev->commandLine, args, 2);
-    if (args.size() == 0 || !file::Exists(args.at(0))) {
-        return false;
-    }
-
+static WCHAR* FormatParams(const WCHAR* cmdLine, TabInfo* tab) {
     // if the command line contains %p, it's replaced with the current page number
     // if it contains %1, it's replaced with the file path (else the file path is appended)
-    const WCHAR* cmdLine = args.size() > 1 ? args.at(1) : L"\"%1\"";
     AutoFreeWstr params;
+    if (cmdLine == nullptr) {
+        cmdLine = L"\"%1\"";
+    }
     if (str::Find(cmdLine, L"%p")) {
         AutoFreeWstr pageNoStr(str::Format(L"%d", tab->ctrl ? tab->ctrl->CurrentPageNo() : 0));
         params.Set(str::Replace(cmdLine, L"%p", pageNoStr));
@@ -366,7 +321,61 @@ bool ViewWithExternalViewer(TabInfo* tab, size_t idx) {
     } else {
         params.Set(str::Format(L"%s \"%s\"", cmdLine, tab->filePath.Get()));
     }
-    return LaunchFile(args.at(0), params);
+    return params.StealData();
+}
+
+bool ViewWithKnownExternalViewer(TabInfo* tab, int cmd) {
+    bool canView = CanViewWithKnownExternalViewer(tab, cmd);
+    CrashIf(!canView);
+    ExternalViewerInfo* info = FindExternalViewerInfoByCmd(cmd);
+    if (!canView || info->exeFullPath == nullptr) {
+        return false;
+    }
+    AutoFreeWstr params = FormatParams(info->launchArgs, tab);
+    return LaunchFile(info->exeFullPath, params);
+}
+
+bool PathMatchFilter(const WCHAR* path, char* filter) {
+    // no filter means matches everything
+    if (str::IsEmpty(filter)) {
+        return true;
+    }
+    if (str::Eq(filter, "*")) {
+        return true;
+    }
+    AutoFreeWstr s = strconv::Utf8ToWstr(filter);
+    bool matches = path::Match(path, s.Get());
+    return matches;
+}
+
+bool ViewWithExternalViewer(TabInfo* tab, size_t idx) {
+    if (!HasPermission(Perm::DiskAccess) || !tab || !file::Exists(tab->filePath)) {
+        return false;
+    }
+
+    for (size_t i = 0; i < gGlobalPrefs->externalViewers->size() && i <= idx; i++) {
+        ExternalViewer* ev = gGlobalPrefs->externalViewers->at(i);
+        // see AppendExternalViewersToMenu in Menu.cpp
+        if (!ev->commandLine || !PathMatchFilter(tab->filePath, ev->filter)) {
+            idx++;
+        }
+    }
+    if (idx >= gGlobalPrefs->externalViewers->size() || !gGlobalPrefs->externalViewers->at(idx)->commandLine) {
+        return false;
+    }
+
+    ExternalViewer* ev = gGlobalPrefs->externalViewers->at(idx);
+    WStrVec args;
+
+    ParseCmdLine(ev->commandLine, args, 2);
+    if (args.size() == 0 || !file::Exists(args.at(0))) {
+        return false;
+    }
+
+    const WCHAR* exePath = args.at(0);
+    const WCHAR* cmdLine = args.size() > 1 ? args.at(1) : nullptr;
+    AutoFreeWstr params = FormatParams(cmdLine, tab);
+    return LaunchFile(exePath, params);
 }
 
 #define DEFINE_GUID_STATIC(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \

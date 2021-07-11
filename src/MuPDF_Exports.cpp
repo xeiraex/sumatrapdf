@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 // Re-declare variables for when building libmupdf.dll,
@@ -27,7 +27,6 @@ const fz_rect fz_unit_rect = {0, 0, 1, 1};
 
 const fz_irect fz_infinite_irect = {1, 1, -1, -1};
 const fz_irect fz_empty_irect = {0, 0, 0, 0};
-const fz_irect fz_unit_bbox = {0, 0, 1, 1};
 
 extern "C" {
 #include <mupdf/fitz/color.h>

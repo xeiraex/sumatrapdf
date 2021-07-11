@@ -35,10 +35,11 @@ var (
 
 // Field defines a field in a struct
 type Field struct {
-	Name       string
-	Type       *Type
-	Default    interface{}
-	Comment    string
+	Name    string
+	Type    *Type
+	Default interface{}
+	Comment string
+	// internal settings are not serialized, only valid during program runtime
 	Internal   bool
 	CName      string
 	Expert     bool // expert prefs are not exposed by the UI
@@ -125,7 +126,7 @@ func (f *Field) cdefault(built map[string]int) string {
 		}
 		return fmt.Sprintf(`(intptr_t)"%s"`, f.Default)
 	}
-	if typeName == "StringArray" {
+	if typeName == "Utf8StringArray" {
 		if f.Default == nil {
 			return "0"
 		}
@@ -189,7 +190,7 @@ func (f *Field) initDefault() string {
 		}
 		return fmt.Sprintf("%s %s =", commentChar, f.Name)
 	}
-	if typeName == "StringArray" {
+	if typeName == "Utf8StringArray" {
 		if f.Default != nil {
 			return fmt.Sprintf("%s = %v", f.Name, f.Default)
 		}
@@ -292,8 +293,8 @@ var (
 	}
 
 	scrollPos = []*Field{
-		mkField("X", Int, 0, "x coordinate"),
-		mkField("Y", Int, 0, "y coordinate"),
+		mkField("X", Float, 0, "x coordinate"),
+		mkField("Y", Float, 0, "y coordinate"),
 	}
 
 	fileTime = []*Field{
@@ -358,12 +359,12 @@ var (
 		mkField("InvertColors", Bool, false,
 			"if true, TextColor and BackgroundColor will be temporarily swapped").setInternal(),
 		mkField("HideScrollbars", Bool, false,
-			"if true, hides the scrollbars but retain ability to scroll").setInternal(),
+			"if true, hides the scrollbars but retains ability to scroll"),
 	}
 
 	ebookUI = []*Field{
 		// default serif font, a different font is used for monospaced text (currently always "Courier New")
-		mkField("FontName", String, "Georgia", "name of the font. takes effect after re-opening the document"),
+		mkField("FontName", Utf8String, "Georgia", "name of the font. takes effect after re-opening the document"),
 		mkField("FontSize", Float, 12.5, "size of the font. takes effect after re-opening the document"),
 		mkField("TextColor", Color, mkRGB(0x5F, 0x4B, 0x32), "color for text"),
 		mkField("BackgroundColor", Color, mkRGB(0xFB, 0xF0, 0xD9), "color of the background (page)"),
@@ -387,20 +388,19 @@ var (
 	}
 
 	externalViewer = []*Field{
-		mkField("CommandLine", String, nil,
+		mkField("CommandLine", Utf8String, nil,
 			"command line with which to call the external viewer, may contain "+
 				"%p for page number and \"%1\" for the file name (add quotation "+
 				"marks around paths containing spaces)"),
-		mkField("Name", String, nil,
+		mkField("Name", Utf8String, nil,
 			"name of the external viewer to be shown in the menu (implied by CommandLine if missing)"),
-		mkField("Filter", String, nil,
+		mkField("Filter", Utf8String, nil,
 			"optional filter for which file types the menu item is to be shown; separate multiple entries using ';' and don't include any spaces (e.g. *.pdf;*.xps for all PDF and XPS documents)"),
 	}
 
-	annotationDefaults = []*Field{
-		mkField("HighlightColor", Color, mkRGB(0xFF, 0xFF, 0x60),
-			"color used for the highlight tool (in prerelease builds, the current selection "+
-				"can be converted into a highlight annotation by pressing the 'h' key)"),
+	annotations = []*Field{
+		mkField("HighlightColor", Color, mkRGB(0xFF, 0xFF, 0x0),
+			"color used for highlight annotations"),
 	}
 
 	favorite = []*Field{
@@ -443,7 +443,7 @@ var (
 				"DefaultDisplayMode after deserialization and before serialization").setDoc("layout of pages. valid values: automatic, single page, facing, book view, " +
 			"continuous, continuous facing, continuous book view"),
 		mkCompactStruct("ScrollPos", scrollPos,
-			"how far this document has been scrolled (in x and y direction)").setStructName("Point"),
+			"how far this document has been scrolled (in x and y direction)").setStructName("PointF"),
 		mkField("PageNo", Int, 1,
 			"number of the last read page"),
 		mkField("Zoom", Utf8String, "fit page",
@@ -494,7 +494,7 @@ var (
 		mkField("Rotation", Int, 0,
 			"same as FileStates -> Rotation"),
 		mkCompactStruct("ScrollPos", scrollPos,
-			"how far this document has been scrolled (in x and y direction)").setStructName("Point"),
+			"how far this document has been scrolled (in x and y direction)").setStructName("PointF"),
 		mkField("ShowToc", Bool, true,
 			"if true, the table of contents was shown when the document was closed"),
 		mkCompactArray("TocState", Int, nil,
@@ -566,10 +566,9 @@ var (
 		mkStruct("ForwardSearch", forwardSearch,
 			"customization options for how we show forward search results (used from "+
 				"LaTeX editors)").setExpert(),
-		mkStruct("AnnotationDefaults", annotationDefaults,
-			"default values for user added annotations in FixedPageUI documents "+
-				"(preliminary and still subject to change)").setExpert().setPreRelease(),
-		mkCompactArray("DefaultPasswords", String, nil,
+		mkStruct("Annotations", annotations,
+			"default values for annotations in PDF documents").setExpert().setVersion("3.3"),
+		mkCompactArray("DefaultPasswords", Utf8String, nil,
 			"passwords to try when opening a password protected document").setDoc("a whitespace separated list of passwords to try when opening a password protected document " +
 			"(passwords containing spaces must be quoted)").setExpert().setVersion("2.4"),
 		mkField("CustomScreenDPI", Int, 0,
@@ -586,14 +585,14 @@ var (
 			"if true, we show the toolbar at the top of the window"),
 		mkField("ShowFavorites", Bool, false,
 			"if true, we show the Favorites sidebar"),
-		mkField("AssociatedExtensions", String, nil,
+		mkField("AssociatedExtensions", Utf8String, nil,
 			"a list of extensions that SumatraPDF has associated itself with and will "+
 				"reassociate if a different application takes over (e.g. \".pdf .xps .epub\")"),
 		mkField("AssociateSilently", Bool, false,
 			"whether file associations should be fixed silently or only after user feedback"),
 		mkField("CheckForUpdates", Bool, true,
 			"if true, we check once a day if an update is available"),
-		mkField("VersionToSkip", String, nil,
+		mkField("VersionToSkip", Utf8String, nil,
 			"we won't ask again to update to this version"),
 		mkField("RememberOpenedFiles", Bool, true,
 			"if true, we remember which files we opened and their display settings"),
@@ -633,7 +632,7 @@ var (
 			"information about opened files (in most recently used order)"),
 		mkArray("SessionData", sessionData,
 			"state of the last session, usage depends on RestoreSession").setVersion("3.1"),
-		mkCompactArray("ReopenOnce", String, nil,
+		mkCompactArray("ReopenOnce", Utf8String, nil,
 			"a list of paths for files to be reopened at the next start "+
 				"or the string \"SessionData\" if this data is saved in SessionData "+
 				"(needed for auto-updating)").setDoc("data required for reloading documents after an auto-update").setVersion("3.0"),
@@ -779,7 +778,7 @@ func buildMetaData(struc *Field, built map[string]int) string {
 
 const settingsStructsHeader = `// !!!!! This file is auto-generated by do/gen_settings_structs.go
 
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 (see COPYING) */
 
 class RenderedBitmap;
@@ -804,8 +803,14 @@ func genSettingsStruct() string {
 	return content
 }
 
+// this we do to work-around a bug in Cloudflare Pages
+func urlizeVersion(s string) string {
+	return strings.Replace(s, ".", "-", -1)
+}
+
 func genAndSaveSettingsStructs() {
-	helpURI := fmt.Sprintf("For documentation, see https://www.sumatrapdfreader.org/settings/settings%s.html", extractSumatraVersionMust())
+	ver := extractSumatraVersionMust()
+	helpURI := fmt.Sprintf("For documentation, see https://www.sumatrapdfreader.org/settings/settings%s.html", urlizeVersion(ver))
 
 	globalPrefs[0].Comment = helpURI
 

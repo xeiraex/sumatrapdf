@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 extern "C" {
@@ -59,13 +59,14 @@ void PdfCreator::SetProducerName(const WCHAR* name) {
 
 // TODO: in 3.1.2 we had grayscale optimization, not sure if worth it
 // TODO: the resulting pdf is big, even though we tell it to compress images
-// mabye encode bitmaps to *.png or .jp2 and use AddPageFromImageData
+// maybe encode bitmaps to *.png or .jp2 and use AddPageFromImageData
 static fz_image* render_to_pixmap(fz_context* ctx, HBITMAP hbmp, Size size) {
     int w = size.dx;
     int h = size.dy;
     int stride = ((w * 3 + 3) / 4) * 4;
 
-    u8* data = (u8*)fz_malloc(ctx, stride * h);
+    size_t totalSize = (size_t)stride * (size_t)h;
+    u8* data = (u8*)fz_malloc(ctx, totalSize);
     if (!data) {
         fz_throw(ctx, FZ_ERROR_GENERIC, "render_to_pixmap: failed to allocate %d bytes", (int)stride * h);
     }
@@ -292,7 +293,7 @@ bool PdfCreator::SetProperty(DocumentProperty prop, const WCHAR* value) {
         return false;
     }
 
-    AutoFree val = strconv::WstrToUtf8(value);
+    auto val = TempToUtf8(value);
 
     pdf_obj* obj = nullptr;
     fz_var(obj);
@@ -344,8 +345,8 @@ const pdf_write_options pdf_default_write_options2 = {
     0,  /* do_incremental */
     0,  /* do_pretty */
     0,  /* do_ascii */
-    1,  /* do_compress */
-    1,  /* do_compress_images */
+    0,  /* do_compress */
+    0,  /* do_compress_images */
     0,  /* do_compress_fonts */
     0,  /* do_decompress */
     0,  /* do_garbage */
@@ -354,6 +355,7 @@ const pdf_write_options pdf_default_write_options2 = {
     0,  /* do_sanitize */
     0,  /* do_appearance */
     0,  /* do_encrypt */
+    0,  /* dont_regenerate_id */
     ~0, /* permissions */
     "", /* opwd_utf8[128] */
     "", /* upwd_utf8[128] */

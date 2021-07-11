@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #define SMOOTHSCROLL_TIMER_ID 2
@@ -31,4 +31,4 @@ bool NeedsSelectionEdgeAutoscroll(WindowInfo* win, int x, int y);
 void OnSelectionEdgeAutoscroll(WindowInfo* win, int x, int y);
 void OnSelectionStart(WindowInfo* win, int x, int y, WPARAM key);
 void OnSelectionStop(WindowInfo* win, int x, int y, bool aborted);
-WCHAR* GetSelectedText(WindowInfo* win, const WCHAR* lineSep, bool& isTextOnlySelectionOut);
+WCHAR* GetSelectedText(TabInfo* win, const WCHAR* lineSep, bool& isTextOnlySelectionOut);

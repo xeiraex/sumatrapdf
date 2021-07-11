@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="cbz">
@@ -30,6 +30,9 @@
     </Filter>
     <Filter Include="generated">
       <UniqueIdentifier>{376c56db-6c04-4f4a-89a8-f63263ea9eb7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="reflow">
+      <UniqueIdentifier>{638fa42b-87ba-4063-aace-fb0f14253521}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -238,6 +241,9 @@
       <Filter>fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\fitz\glyph.c">
+      <Filter>fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\fitz\glyphbox.c">
       <Filter>fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\fitz\halftone.c">
@@ -588,9 +594,6 @@
     <ClCompile Include="..\..\source\fitz\log.c">
       <Filter>fitz</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\source\fitz\output-pdfocr.c">
-      <Filter>fitz</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\source\fitz\ocr-device.c">
       <Filter>fitz</Filter>
     </ClCompile>
@@ -599,6 +602,15 @@
     </ClCompile>
     <ClCompile Include="..\..\source\fitz\output-docx.c">
       <Filter>fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\pdf\pdf-layout.c">
+      <Filter>pdf</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\fitz\output-pdfocr.c">
+      <Filter>fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\reflow\reflow-doc.c">
+      <Filter>reflow</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -666,9 +678,6 @@
       <Filter>!include\pdf</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mupdf\pdf\object.h">
-      <Filter>!include\pdf</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\include\mupdf\pdf\output-pdf.h">
       <Filter>!include\pdf</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mupdf\pdf\page.h">
@@ -836,11 +845,17 @@
     <ClInclude Include="..\..\source\fitz\glyph-imp.h">
       <Filter>fitz</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\fitz\glyphbox.h">
+      <Filter>fitz</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\fitz\image-imp.h">
       <Filter>fitz</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\fitz\pixmap-imp.h">
       <Filter>fitz</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\pdf\pdf-annot-imp.h">
+      <Filter>pdf</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

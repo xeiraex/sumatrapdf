@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -121,14 +121,6 @@ static Vec<StaticLinkInfo> gLinkInfo;
 
 static void DrawAppName(HDC hdc, Point pt) {
     const WCHAR* txt = GetAppName();
-    if (gIsRaMicroBuild) {
-        // simple black-ish version
-        COLORREF col = RGB(0x43, 0x43, 0x43);
-        SetTextColor(hdc, col);
-        TextOutW(hdc, pt.x, pt.y, txt, (int)str::Len(txt));
-        return;
-    }
-
     // colorful version
     COLORREF cols[] = {COL1, COL2, COL3, COL4, COL5, COL5, COL4, COL3, COL2, COL1};
     for (size_t i = 0; i < str::Len(txt); i++) {
@@ -272,8 +264,8 @@ static void DrawAbout(HWND hwnd, HDC hdc, Rect rect, Vec<StaticLinkInfo>& linkIn
     col = GetAppColor(AppColor::MainWindowLink);
     AutoDeletePen penLinkLine(CreatePen(PS_SOLID, ABOUT_LINE_SEP_SIZE, col));
 
-    AutoDeleteFont fontLeftTxt(CreateSimpleFont(hdc, LEFT_TXT_FONT, LEFT_TXT_FONT_SIZE));
-    AutoDeleteFont fontRightTxt(CreateSimpleFont(hdc, RIGHT_TXT_FONT, RIGHT_TXT_FONT_SIZE));
+    AutoDeleteFont fontLeftTxt(CreateSimpleFont(hdc, kLeftTextFont, kLeftTextFontSize));
+    AutoDeleteFont fontRightTxt(CreateSimpleFont(hdc, kRightTextFont, kRightTextFontSize));
 
     ScopedSelectObject font(hdc, fontLeftTxt); /* Just to remember the orig font */
 
@@ -323,7 +315,7 @@ static void DrawAbout(HWND hwnd, HDC hdc, Rect rect, Vec<StaticLinkInfo>& linkIn
     SelectObject(hdc, penLinkLine);
     linkInfo.Reset();
     for (AboutLayoutInfoEl* el = gAboutLayoutInfo; el->leftTxt; el++) {
-        bool hasUrl = HasPermission(Perm_DiskAccess) && el->url;
+        bool hasUrl = HasPermission(Perm::DiskAccess) && el->url;
         if (hasUrl) {
             col = GetAppColor(AppColor::MainWindowLink);
         } else {
@@ -351,8 +343,8 @@ static void DrawAbout(HWND hwnd, HDC hdc, Rect rect, Vec<StaticLinkInfo>& linkIn
 }
 
 static void UpdateAboutLayoutInfo(HWND hwnd, HDC hdc, Rect* rect) {
-    AutoDeleteFont fontLeftTxt(CreateSimpleFont(hdc, LEFT_TXT_FONT, LEFT_TXT_FONT_SIZE));
-    AutoDeleteFont fontRightTxt(CreateSimpleFont(hdc, RIGHT_TXT_FONT, RIGHT_TXT_FONT_SIZE));
+    AutoDeleteFont fontLeftTxt(CreateSimpleFont(hdc, kLeftTextFont, kLeftTextFontSize));
+    AutoDeleteFont fontRightTxt(CreateSimpleFont(hdc, kRightTextFont, kRightTextFontSize));
 
     HGDIOBJ origFont = SelectObject(hdc, fontLeftTxt);
 
@@ -476,7 +468,7 @@ static void CopyAboutInfoToClipboard([[maybe_unused]] HWND hwnd) {
 }
 
 const WCHAR* GetStaticLink(Vec<StaticLinkInfo>& linkInfo, int x, int y, StaticLinkInfo* info) {
-    if (!HasPermission(Perm_DiskAccess)) {
+    if (!HasPermission(Perm::DiskAccess)) {
         return nullptr;
     }
 
@@ -516,6 +508,8 @@ LRESULT CALLBACK WndProcAbout(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     const WCHAR* url;
     Point pt;
 
+    int x = GET_X_LPARAM(lp);
+    int y = GET_Y_LPARAM(lp);
     switch (msg) {
         case WM_CREATE:
             CrashIf(gHwndAbout);
@@ -542,11 +536,11 @@ LRESULT CALLBACK WndProcAbout(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return DefWindowProc(hwnd, msg, wp, lp);
 
         case WM_LBUTTONDOWN:
-            gClickedURL = GetStaticLink(gLinkInfo, GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+            gClickedURL = GetStaticLink(gLinkInfo, x, y, nullptr);
             break;
 
         case WM_LBUTTONUP:
-            url = GetStaticLink(gLinkInfo, GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+            url = GetStaticLink(gLinkInfo, x, y, nullptr);
             if (url && url == gClickedURL) {
                 SumatraLaunchBrowser(url);
             }
@@ -623,9 +617,9 @@ void DrawAboutPage(WindowInfo* win, HDC hdc) {
     Rect rc = ClientRect(win->hwndCanvas);
     UpdateAboutLayoutInfo(win->hwndCanvas, hdc, &rc);
     DrawAbout(win->hwndCanvas, hdc, rc, win->staticLinks);
-    if (HasPermission(Perm_SavePreferences | Perm_DiskAccess) && gGlobalPrefs->rememberOpenedFiles) {
+    if (HasPermission(Perm::SavePreferences | Perm::DiskAccess) && gGlobalPrefs->rememberOpenedFiles) {
         Rect rect = DrawHideFrequentlyReadLink(win->hwndCanvas, hdc, _TR("Show frequently read"));
-        win->staticLinks.Append(StaticLinkInfo(rect, SLINK_LIST_SHOW));
+        win->staticLinks.Append(StaticLinkInfo(rect, kLinkShowList));
     }
 }
 
@@ -651,9 +645,6 @@ void DrawStartPage(WindowInfo* win, HDC hdc, FileHistory& fileHistory, COLORREF 
 
     AutoDeleteFont fontSumatraTxt(CreateSimpleFont(hdc, L"MS Shell Dlg", 24));
     int fontSize = 24;
-    if (gIsRaMicroBuild) {
-        fontSize = 20;
-    }
     AutoDeleteFont fontFrequentlyRead(CreateSimpleFont(hdc, L"MS Shell Dlg", fontSize));
     AutoDeleteFont fontLeftTxt(CreateSimpleFont(hdc, L"MS Shell Dlg", 14));
 
@@ -682,7 +673,7 @@ void DrawStartPage(WindowInfo* win, HDC hdc, FileHistory& fileHistory, COLORREF 
     FillRect(hdc, &rTmp, brushAboutBg);
     rc.dy -= DOCLIST_BOTTOM_BOX_DY;
 
-    Vec<DisplayState*> list;
+    Vec<FileState*> list;
     fileHistory.GetFrequencyOrder(list);
 
     int dx = (rc.dx - DOCLIST_MARGIN_LEFT - DOCLIST_MARGIN_RIGHT + DOCLIST_MARGIN_BETWEEN_X) /
@@ -715,7 +706,7 @@ void DrawStartPage(WindowInfo* win, HDC hdc, FileHistory& fileHistory, COLORREF 
                 height = w > 0 ? h + 1 : h;
                 break;
             }
-            DisplayState* state = list.at(h * width + w);
+            FileState* state = list.at(h * width + w);
 
             Rect page(offset.x + w * (THUMBNAIL_DX + DOCLIST_MARGIN_BETWEEN_X),
                       offset.y + h * (THUMBNAIL_DY + DOCLIST_MARGIN_BETWEEN_Y), THUMBNAIL_DX, THUMBNAIL_DY);
@@ -786,5 +777,5 @@ void DrawStartPage(WindowInfo* win, HDC hdc, FileHistory& fileHistory, COLORREF 
     ImageList_Draw(himl, 0 /* index of Open icon */, hdc, rectIcon.x, rectIcon.y, ILD_NORMAL);
 
     Rect rect = DrawHideFrequentlyReadLink(win->hwndCanvas, hdc, _TR("Hide frequently read"));
-    win->staticLinks.Append(StaticLinkInfo(rect, SLINK_LIST_HIDE));
+    win->staticLinks.Append(StaticLinkInfo(rect, kLinkHideList));
 }

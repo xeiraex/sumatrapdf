@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -68,8 +68,8 @@ void Button::RecalculateSize(bool repaintIfSizeDidntChange) {
             fontDy = bbox.dy;
             float diff = fontDy + maxDiff - bbox.dy;
             if (diff < 0) {
-                AutoFree fontName = strconv::WstrToUtf8(s->fontName);
-                AutoFree tmp = strconv::WstrToUtf8(text);
+                auto fontName = TempToUtf8(s->fontName);
+                auto tmp = TempToUtf8(text);
                 logf("fontDy=%.2f, bbox.Height=%.2f, diff=%.2f (should be > 0) font: %s, text='%s'\n", fontDy, bbox.dy,
                      diff, fontName.Get(), tmp.Get());
                 CrashIf(true);
@@ -88,7 +88,7 @@ void Button::RecalculateSize(bool repaintIfSizeDidntChange) {
 }
 
 void Button::SetText(const WCHAR* s) {
-    str::ReplacePtr(&text, s);
+    str::ReplaceWithCopy(&text, s);
     RecalculateSize(true);
 }
 
@@ -130,10 +130,10 @@ void Button::SetMouseOverStyle(Style* style) {
 // a container and alignment, calculates the position of
 // element within the container.
 static int AlignedOffset(int containerDx, int elDx, AlignAttr align) {
-    if (Align_Left == align) {
+    if (AlignAttr::Left == align) {
         return 0;
     }
-    if (Align_Right == align) {
+    if (AlignAttr::Right == align) {
         return containerDx - elDx;
     }
     // Align_Center or Align_Justify

@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -69,7 +69,7 @@ Control::Control(Control* newParent) {
 }
 
 void Control::SetToolTip(const WCHAR* toolTip) {
-    str::ReplacePtr(&this->toolTip, toolTip);
+    str::ReplaceWithCopy(&this->toolTip, toolTip);
     if (nullptr == toolTip) {
         wantedInputBits &= WantsMouseOverBit;
     } else {
@@ -78,7 +78,7 @@ void Control::SetToolTip(const WCHAR* toolTip) {
 }
 
 void Control::SetNamedEventClick(const char* s) {
-    str::ReplacePtr(&this->namedEventClick, s);
+    str::ReplaceWithCopy(&this->namedEventClick, s);
 }
 
 // note: all derived classes must call Control::NotifyMouseEnter()

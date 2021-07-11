@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -490,18 +490,19 @@ static INT_PTR CALLBACK Dialog_NewVersion_Proc(HWND hDlg, UINT msg, WPARAM wp, L
     return FALSE;
 }
 
-INT_PTR Dialog_NewVersionAvailable(HWND hwnd, const WCHAR* currentVersion, const WCHAR* newVersion,
+INT_PTR Dialog_NewVersionAvailable(HWND hwnd, const char* currentVersion, const char* newVersion,
                                    bool* skipThisVersion) {
     Dialog_NewVersion_Data data;
-    data.currVersion = currentVersion;
-    data.newVersion = newVersion;
+    data.currVersion = strconv::Utf8ToWstr(currentVersion);
+    data.newVersion = strconv::Utf8ToWstr(newVersion);
     data.skipThisVersion = false;
 
     INT_PTR res = CreateDialogBox(IDD_DIALOG_NEW_VERSION, hwnd, Dialog_NewVersion_Proc, (LPARAM)&data);
     if (skipThisVersion) {
         *skipThisVersion = data.skipThisVersion;
     }
-
+    str::Free(data.currVersion);
+    str::Free(data.newVersion);
     return res;
 }
 
@@ -691,7 +692,7 @@ static INT_PTR CALLBACK Dialog_Settings_Proc(HWND hDlg, UINT msg, WPARAM wp, LPA
             EnableWindow(GetDlgItem(hDlg, IDC_REMEMBER_STATE_PER_DOCUMENT), prefs->rememberOpenedFiles);
             CheckDlgButton(hDlg, IDC_USE_TABS, prefs->useTabs ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hDlg, IDC_CHECK_FOR_UPDATES, prefs->checkForUpdates ? BST_CHECKED : BST_UNCHECKED);
-            EnableWindow(GetDlgItem(hDlg, IDC_CHECK_FOR_UPDATES), HasPermission(Perm_InternetAccess));
+            EnableWindow(GetDlgItem(hDlg, IDC_CHECK_FOR_UPDATES), HasPermission(Perm::InternetAccess));
             CheckDlgButton(hDlg, IDC_REMEMBER_OPENED_FILES, prefs->rememberOpenedFiles ? BST_CHECKED : BST_UNCHECKED);
             if (IsExeAssociatedWithPdfExtension()) {
                 SetDlgItemText(hDlg, IDC_SET_DEFAULT_READER, _TR("SumatraPDF is your default PDF reader"));
@@ -702,7 +703,7 @@ static INT_PTR CALLBACK Dialog_Settings_Proc(HWND hDlg, UINT msg, WPARAM wp, LPA
                 EnableWindow(GetDlgItem(hDlg, IDC_SET_DEFAULT_READER), FALSE);
             } else {
                 SetDlgItemText(hDlg, IDC_SET_DEFAULT_READER, _TR("Make SumatraPDF my default PDF reader"));
-                EnableWindow(GetDlgItem(hDlg, IDC_SET_DEFAULT_READER), HasPermission(Perm_RegistryAccess));
+                EnableWindow(GetDlgItem(hDlg, IDC_SET_DEFAULT_READER), HasPermission(Perm::RegistryAccess));
             }
 
             win::SetText(hDlg, _TR("SumatraPDF Options"));
@@ -721,7 +722,7 @@ static INT_PTR CALLBACK Dialog_Settings_Proc(HWND hDlg, UINT msg, WPARAM wp, LPA
             SetDlgItemText(hDlg, IDOK, _TR("OK"));
             SetDlgItemText(hDlg, IDCANCEL, _TR("Cancel"));
 
-            if (prefs->enableTeXEnhancements && HasPermission(Perm_DiskAccess)) {
+            if (prefs->enableTeXEnhancements && HasPermission(Perm::DiskAccess)) {
                 // Fill the combo with the list of possible inverse search commands
                 // Try to select a correct default when first showing this dialog
                 const WCHAR* cmdLine = prefs->inverseSearchCmdLine;
@@ -767,7 +768,7 @@ static INT_PTR CALLBACK Dialog_Settings_Proc(HWND hDlg, UINT msg, WPARAM wp, LPA
                     prefs->useTabs = (BST_CHECKED == IsDlgButtonChecked(hDlg, IDC_USE_TABS));
                     prefs->checkForUpdates = (BST_CHECKED == IsDlgButtonChecked(hDlg, IDC_CHECK_FOR_UPDATES));
                     prefs->rememberOpenedFiles = (BST_CHECKED == IsDlgButtonChecked(hDlg, IDC_REMEMBER_OPENED_FILES));
-                    if (prefs->enableTeXEnhancements && HasPermission(Perm_DiskAccess)) {
+                    if (prefs->enableTeXEnhancements && HasPermission(Perm::DiskAccess)) {
                         free(prefs->inverseSearchCmdLine);
                         prefs->inverseSearchCmdLine = win::GetText(GetDlgItem(hDlg, IDC_CMDLINE));
                     }
@@ -790,7 +791,7 @@ static INT_PTR CALLBACK Dialog_Settings_Proc(HWND hDlg, UINT msg, WPARAM wp, LPA
                     return TRUE;
 
                 case IDC_SET_DEFAULT_READER:
-                    if (!HasPermission(Perm_RegistryAccess)) {
+                    if (!HasPermission(Perm::RegistryAccess)) {
                         return TRUE;
                     }
                     AssociateExeWithPdfExtension();
@@ -837,14 +838,13 @@ static INT_PTR CALLBACK Sheet_Print_Advanced_Proc(HWND hDlg, UINT msg, WPARAM wp
             SetDlgItemText(hDlg, IDC_SECTION_PRINT_COMPATIBILITY, _TR("Compatibility"));
 
             CheckRadioButton(hDlg, IDC_PRINT_RANGE_ALL, IDC_PRINT_RANGE_ODD,
-                             data->range == PrintRangeAdv::Even
-                                 ? IDC_PRINT_RANGE_EVEN
-                                 : data->range == PrintRangeAdv::Odd ? IDC_PRINT_RANGE_ODD : IDC_PRINT_RANGE_ALL);
-            CheckRadioButton(
-                hDlg, IDC_PRINT_SCALE_SHRINK, IDC_PRINT_SCALE_NONE,
-                data->scale == PrintScaleAdv::Fit
-                    ? IDC_PRINT_SCALE_FIT
-                    : data->scale == PrintScaleAdv::Shrink ? IDC_PRINT_SCALE_SHRINK : IDC_PRINT_SCALE_NONE);
+                             data->range == PrintRangeAdv::Even  ? IDC_PRINT_RANGE_EVEN
+                             : data->range == PrintRangeAdv::Odd ? IDC_PRINT_RANGE_ODD
+                                                                 : IDC_PRINT_RANGE_ALL);
+            CheckRadioButton(hDlg, IDC_PRINT_SCALE_SHRINK, IDC_PRINT_SCALE_NONE,
+                             data->scale == PrintScaleAdv::Fit      ? IDC_PRINT_SCALE_FIT
+                             : data->scale == PrintScaleAdv::Shrink ? IDC_PRINT_SCALE_SHRINK
+                                                                    : IDC_PRINT_SCALE_NONE);
 
             return FALSE;
             //] ACCESSKEY_GROUP Advanced Print Tab

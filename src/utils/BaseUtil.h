@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #ifndef BaseUtil_h
@@ -23,6 +23,22 @@
 #else
 #define OS_WIN 0
 #endif
+
+#if defined(_M_IX86) || defined(__i386__)
+#define IS_32BIT 1
+#define IS_INTEL_32 1
+#define IS_64BIT 0
+#define IS_INTEL_64 0
+#endif
+
+#if defined(_M_X64) || defined(__x86_64__)
+#define IS_64BIT 1
+#define IS_INTEL_64 1
+#define IS_32BIT 0
+#define IS_INTEL_32 0
+#endif
+
+// TODO: ARM 64bit
 
 /* OS_UNIX - Any Unix-like system */
 #if OS_DARWIN || OS_LINUX || defined(unix) || defined(__unix) || defined(__unix__)
@@ -53,10 +69,8 @@
 #define COMPILER_MINGW 0
 #endif
 
-#if OS_WIN
 #ifndef UNICODE
 #define UNICODE
-#endif
 #endif
 
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -65,7 +79,6 @@
 
 #include "BuildConfig.h"
 
-#if OS_WIN
 #define NOMINMAX
 #include <windows.h>
 #include <unknwn.h>
@@ -88,17 +101,6 @@
 #undef max
 
 #include <io.h>
-
-#ifdef DEBUG
-#define _CRTDBG_MAP_ALLOC
-#include <crtdbg.h>
-// TODO: this breaks placement new but without this we
-// don't get leaked memory allocation source
-#define DEBUG_NEW new (_NORMAL_BLOCK, __FILE__, __LINE__)
-#define new DEBUG_NEW
-#endif
-
-#endif
 
 // Most common C includes
 #include <stdlib.h>
@@ -130,6 +132,7 @@
 //#include <iostream>
 //#include <locale>
 
+typedef int8_t i8;
 typedef uint8_t u8;
 typedef int16_t i16;
 typedef uint16_t u16;
@@ -237,14 +240,18 @@ inline void SendCrashIfFunc(bool cond, [[maybe_unused]] const char* condStr) {
 }
 
 // Sometimes we want to assert only in debug build (not in pre-release)
+#if defined(DEBUG)
 inline void DebugCrashIfFunc(bool cond) {
     if (!cond) {
         return;
     }
-#if defined(DEBUG)
     CrashMe();
-#endif
 }
+#else
+inline void DebugCrashIfFunc(bool) {
+    // no-op
+}
+#endif
 
 // __analysis_assume is defined by msvc for prefast analysis
 #if !defined(__analysis_assume)
@@ -276,10 +283,6 @@ inline void DebugCrashIfFunc(bool cond) {
         __analysis_assume(!(cond));   \
         SendCrashIfFunc(cond, #cond); \
     } while (0)
-
-#if !OS_WIN
-void ZeroMemory(void* p, size_t len);
-#endif
 
 void* AllocZero(size_t count, size_t size);
 
@@ -324,13 +327,13 @@ inline bool addOverflows(T val, T n) {
     return val > res;
 }
 
-void* memdup(const void* data, size_t len);
+void* memdup(const void* data, size_t len, size_t extraBytes = 0);
 bool memeq(const void* s1, const void* s2, size_t len);
 
 size_t RoundToPowerOf2(size_t size);
 u32 MurmurHash2(const void* key, size_t len);
 
-size_t RoundUp(size_t n, size_t rounding);
+constexpr size_t RoundUp(size_t n, size_t rounding);
 int RoundUp(int n, int rounding);
 char* RoundUp(char*, int rounding);
 
@@ -382,13 +385,7 @@ struct Allocator {
     static void* AllocZero(Allocator* a, size_t size);
     static void Free(Allocator* a, void* p);
     static void* Realloc(Allocator* a, void* mem, size_t size);
-    static void* MemDup(Allocator* a, const void* mem, size_t size, size_t padding = 0);
-    static char* StrDup(Allocator* a, const char* str);
-    static std::string_view AllocString(Allocator* a, std::string_view str);
-
-#if OS_WIN
-    static WCHAR* StrDup(Allocator* a, const WCHAR* str);
-#endif
+    static void* MemDup(Allocator* a, const void* mem, size_t size, size_t extraBytes = 0);
 };
 
 // PoolAllocator is for the cases where we need to allocate pieces of memory
@@ -402,19 +399,15 @@ struct Allocator {
 struct PoolAllocator : Allocator {
     // we'll allocate block of the minBlockSize unless
     // asked for a block of bigger size
-    int minBlockSize = 4096;
-    // alignment of allocations, must be 2^N or <= 1 to disable
-    // We might apply padding so that allocated memory starts at
-    // multiply of allocAlign. This is sometimes needed to satisfy ABI
-    // requirements or to ensure CPU operations (like SSE) are fast
-    int allocAlign = 8;
+    size_t minBlockSize = 4096;
 
     // contains allocated data and index of each allocation
     struct Block {
         struct Block* next;
-        int dataSize; // for debugging, not used
-        int nAllocs;
-        char* curr;
+        size_t dataSize; // size of data in block
+        size_t nAllocs;
+        // curr points to free space
+        char* freeSpace;
         // from the end, we store index of each allocation relative
         // to start of the block. <end> points at the current
         // reverse end of i32 array of indexes
@@ -435,7 +428,7 @@ struct PoolAllocator : Allocator {
     void* Alloc(size_t size) override;
 
     void FreeAll();
-    void Reset();
+    void Reset(bool poisonFreedMemory = false);
     void* At(int i);
 
     // only valid for structs, could alloc objects with
@@ -448,7 +441,7 @@ struct PoolAllocator : Allocator {
     // Iterator for easily traversing allocated memory as array
     // of values of type T. The caller has to enforce the fact
     // that the values stored are indeed values of T
-    // cf. http://www.cprogramming.com/c++11/c++11-ranged-for-loop.html
+    // see http://www.cprogramming.com/c++11/c++11-ranged-for-loop.html
     template <typename T>
     class Iter {
         PoolAllocator* self;
@@ -567,6 +560,8 @@ inline bool isOfKindHelper(Kind k1, Kind k2) {
 
 #define IsOfKind(o, wantedKind) (o && isOfKindHelper(o->kind, wantedKind))
 
+extern Kind kindNone; // unknown kind
+
 // from https://pastebin.com/3YvWQa5c
 // In my testing, in debug build defer { } creates somewhat bloated code
 // but in release it seems to be optimized to optimally small code
@@ -612,6 +607,7 @@ defer { instance->Release(); };
 #include "Vec.h"
 #include "StringViewUtil.h"
 #include "ColorUtil.h"
+#include "TempAllocator.h"
 
 // lstrcpy is dangerous so forbid using it
 #ifdef lstrcpy

@@ -310,6 +310,22 @@ fz_new_stext_page_from_page_number(fz_context *ctx, fz_document *doc, int number
 	return text;
 }
 
+fz_stext_page *
+fz_new_stext_page_from_chapter_page_number(fz_context *ctx, fz_document *doc, int chapter, int number, const fz_stext_options *options)
+{
+	fz_page *page;
+	fz_stext_page *text = NULL;
+
+	page = fz_load_chapter_page(ctx, doc, chapter, number);
+	fz_try(ctx)
+		text = fz_new_stext_page_from_page(ctx, page, options);
+	fz_always(ctx)
+		fz_drop_page(ctx, page);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+	return text;
+}
+
 int
 fz_search_display_list(fz_context *ctx, fz_display_list *list, const char *needle, fz_quad *hit_bbox, int hit_max)
 {
@@ -510,9 +526,9 @@ fz_write_pixmap_as_data_uri(fz_context *ctx, fz_output *out, fz_pixmap *pixmap)
 }
 
 fz_document *
-fz_new_xhtml_document_from_document(fz_context *ctx, fz_document *old_doc)
+fz_new_xhtml_document_from_document(fz_context *ctx, fz_document *old_doc, const fz_stext_options *opts)
 {
-	fz_stext_options opts = { FZ_STEXT_PRESERVE_IMAGES };
+	fz_stext_options default_opts = { FZ_STEXT_PRESERVE_IMAGES | FZ_STEXT_DEHYPHENATE };
 	fz_document *new_doc;
 	fz_buffer *buf = NULL;
 	fz_output *out = NULL;
@@ -525,6 +541,9 @@ fz_new_xhtml_document_from_document(fz_context *ctx, fz_document *old_doc)
 	fz_var(stm);
 	fz_var(text);
 
+	if (!opts)
+		opts = &default_opts;
+
 	fz_try(ctx)
 	{
 		buf = fz_new_buffer(ctx, 8192);
@@ -533,7 +552,7 @@ fz_new_xhtml_document_from_document(fz_context *ctx, fz_document *old_doc)
 
 		for (i = 0; i < fz_count_pages(ctx, old_doc); ++i)
 		{
-			text = fz_new_stext_page_from_page_number(ctx, old_doc, i, &opts);
+			text = fz_new_stext_page_from_page_number(ctx, old_doc, i, opts);
 			fz_print_stext_page_as_xhtml(ctx, out, text, i+1);
 			fz_drop_stext_page(ctx, text);
 			text = NULL;
@@ -544,7 +563,7 @@ fz_new_xhtml_document_from_document(fz_context *ctx, fz_document *old_doc)
 		fz_terminate_buffer(ctx, buf);
 
 		stm = fz_open_buffer(ctx, buf);
-		new_doc = fz_open_document_with_stream(ctx, "application/html+xml", stm);
+		new_doc = fz_open_document_with_stream(ctx, "application/xhtml+xml", stm);
 	}
 	fz_always(ctx)
 	{

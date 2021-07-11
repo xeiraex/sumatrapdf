@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -96,7 +96,7 @@ float ZoomFromString(const char* s, float defVal) {
     return defVal;
 }
 
-void ZoomToString(char** dst, float zoom, DisplayState* stateForIssue2140) {
+void ZoomToString(char** dst, float zoom, FileState* stateForIssue2140) {
     float prevZoom = *dst ? ZoomFromString(*dst, INVALID_ZOOM) : INVALID_ZOOM;
     if (prevZoom == zoom) {
         return;

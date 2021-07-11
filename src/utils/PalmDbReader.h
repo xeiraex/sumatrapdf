@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 // values for typeCreator
@@ -59,10 +59,8 @@ class PdbReader {
     static PdbReader* CreateFromData(std::span<u8>);
     static PdbReader* CreateFromFile(const char* path);
 
-#if OS_WIN
     static PdbReader* CreateFromFile(const WCHAR* path);
     static PdbReader* CreateFromStream(IStream* stream);
-#endif
 };
 
 // stuff for mobi format

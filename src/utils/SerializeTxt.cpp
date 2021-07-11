@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "BaseUtil.h"
@@ -459,7 +459,7 @@ static bool DecodeField(DecodeState& ds, TxtNode* firstNode, const char* fieldNa
         size_t sLen = node->valEnd - s;
         if (s && (sLen > 0)) {
             // note: we don't free s because it's remembered in structDataPtr
-            s = str::DupN(s, sLen);
+            s = str::Dup(s, sLen);
             WriteStructStr(structDataPtr, s);
         }
         return true;

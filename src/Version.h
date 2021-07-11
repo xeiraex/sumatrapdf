@@ -1,12 +1,12 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 // CURR_VERSION can be over-written externally
 #ifndef CURR_VERSION
-#define CURR_VERSION 3.3
+#define CURR_VERSION 3.4
 #endif
 #ifndef CURR_VERSION_COMMA
-#define CURR_VERSION_COMMA 3,3,0
+#define CURR_VERSION_COMMA 3,4,0
 #endif
 
 // VER_QUALIFIER allows people who recompile SumatraPDF to add
@@ -32,6 +32,7 @@
  #define VER_RESOURCE_STR  CURR_VERSION_STRA
  #define VER_RESOURCE      CURR_VERSION_COMMA,0
  #define UPDATE_CHECK_VER  TEXT(QM(CURR_VERSION))
+ #define UPDATE_CHECK_VERA QM(CURR_VERSION)
 #else
  #ifndef VER_QUALIFIER
    #define CURR_VERSION_STRA QM3(CURR_VERSION, ., PRE_RELEASE_VER)
@@ -42,18 +43,11 @@
  #endif
  #define VER_RESOURCE      CURR_VERSION_COMMA,PRE_RELEASE_VER
  #define UPDATE_CHECK_VER  TEXT(QM(PRE_RELEASE_VER))
+ #define UPDATE_CHECK_VERA QM(PRE_RELEASE_VER)
 #endif
 #define CURR_VERSION_STR TEXT(CURR_VERSION_STRA)
 
-#define COPYRIGHT_STR      "Copyright 2006-2020 all authors (GPLv3)"
-#if defined(RAMICRO)
-#define PUBLISHER_STR      "RA-MICRO"
-#else
+#define COPYRIGHT_STR      "Copyright 2006-2021 all authors (GPLv3)"
 #define PUBLISHER_STR      "Krzysztof Kowalczyk"
-#endif
 
-#if defined(RAMICRO)
-#define APP_NAME_STR        "RA-MICRO PDF Viewer"
-#else
 #define APP_NAME_STR        "SumatraPDF"
-#endif

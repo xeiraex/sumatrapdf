@@ -385,7 +385,6 @@ subarea_drop(fz_context *ctx, void *state)
 static fz_stream *
 subarea_stream(fz_context *ctx, fz_stream *stm, fz_image *image, const fz_irect *subarea, int l2factor)
 {
-	fz_stream *sstm = NULL;
 	subarea_state *state;
 	int f = 1<<l2factor;
 	int stream_w = (image->w + f - 1)>>l2factor;
@@ -412,16 +411,7 @@ subarea_stream(fz_context *ctx, fz_stream *stm, fz_image *image, const fz_irect 
 	state->stride = stride;
 	state->nread = stride;
 
-	fz_var(sstm);
-
-	fz_try(ctx)
-		sstm = fz_new_stream(ctx, state, subarea_next, subarea_drop);
-	fz_catch(ctx)
-	{
-		fz_free(ctx, state);
-		fz_rethrow(ctx);
-	}
-	return sstm;
+	return fz_new_stream(ctx, state, subarea_next, subarea_drop);
 }
 
 typedef struct
@@ -492,7 +482,6 @@ subsample_next(fz_context *ctx, fz_stream *stm, size_t len)
 static fz_stream *
 subsample_stream(fz_context *ctx, fz_stream *src, int w, int h, int n, int l2extra)
 {
-	fz_stream *stm;
 	l2sub_state *state = fz_malloc(ctx, sizeof(l2sub_state) + w*(size_t)(n<<l2extra));
 
 	state->src = src;
@@ -503,15 +492,7 @@ subsample_stream(fz_context *ctx, fz_stream *src, int w, int h, int n, int l2ext
 	state->r = 0;
 	state->l2 = l2extra;
 
-	fz_try(ctx)
-		stm = fz_new_stream(ctx, state, subsample_next, subsample_drop);
-	fz_catch(ctx)
-	{
-		fz_free(ctx, state);
-		fz_rethrow(ctx);
-	}
-
-	return stm;
+	return fz_new_stream(ctx, state, subsample_next, subsample_drop);
 }
 
 /* l2factor is the amount of subsampling that the decoder is going to be
@@ -550,11 +531,11 @@ fz_decomp_image_from_stream(fz_context *ctx, fz_stream *stm, fz_compressed_image
 			subarea->y0 == 0 && subarea->y1 == image->h)
 			subarea = NULL;
 		else
-	{
-		fz_adjust_image_subarea(ctx, image, subarea, l2factor);
-		w = (subarea->x1 - subarea->x0);
-		h = (subarea->y1 - subarea->y0);
-	}
+		{
+			fz_adjust_image_subarea(ctx, image, subarea, l2factor);
+			w = (subarea->x1 - subarea->x0);
+			h = (subarea->y1 - subarea->y0);
+		}
 	}
 	w = (w + f - 1) >> l2factor;
 	h = (h + f - 1) >> l2factor;
@@ -640,7 +621,6 @@ fz_decomp_image_from_stream(fz_context *ctx, fz_stream *stm, fz_compressed_image
 	fz_catch(ctx)
 	{
 		fz_drop_pixmap(ctx, tile);
-		fz_free(ctx, samples);
 		fz_rethrow(ctx);
 	}
 
@@ -947,7 +927,7 @@ fz_get_pixmap_from_image(fz_context *ctx, fz_image *image, const fz_irect *subar
 	tile = image->get_pixmap(ctx, image, &key.rect, w, h, &l2factor_remaining);
 
 	/* Update the ctm to allow for subareas. */
-		update_ctm_for_subarea(ctm, &key.rect, image->w, image->h);
+	update_ctm_for_subarea(ctm, &key.rect, image->w, image->h);
 
 	/* l2factor_remaining is updated to the amount of subscaling left to do */
 	assert(l2factor_remaining >= 0 && l2factor_remaining <= 6);
@@ -993,6 +973,12 @@ fz_get_pixmap_from_image(fz_context *ctx, fz_image *image, const fz_irect *subar
 	}
 
 	return tile;
+}
+
+fz_pixmap *
+fz_get_unscaled_pixmap_from_image(fz_context *ctx, fz_image *image)
+{
+	return fz_get_pixmap_from_image(ctx, image, NULL /*subarea*/, NULL /*ctm*/, NULL /*dw*/, NULL /*dh*/);
 }
 
 static size_t
@@ -1172,6 +1158,8 @@ fz_recognize_image_format(fz_context *ctx, unsigned char p[8])
 {
 	if (p[0] == 'P' && p[1] >= '1' && p[1] <= '7')
 		return FZ_IMAGE_PNM;
+	if (p[0] == 'P' && (p[1] == 'F' || p[1] == 'f'))
+		return FZ_IMAGE_PNM;
 	if (p[0] == 0xff && p[1] == 0x4f)
 		return FZ_IMAGE_JPX;
 	if (p[0] == 0x00 && p[1] == 0x00 && p[2] == 0x00 && p[3] == 0x0c &&
@@ -1211,6 +1199,7 @@ fz_new_image_from_buffer(fz_context *ctx, fz_buffer *buffer)
 	fz_image *image = NULL;
 	int type;
 	int bpc;
+	uint8_t orientation = 0;
 
 	if (len < 8)
 		fz_throw(ctx, FZ_ERROR_GENERIC, "unknown image file format");
@@ -1226,7 +1215,7 @@ fz_new_image_from_buffer(fz_context *ctx, fz_buffer *buffer)
 		fz_load_jpx_info(ctx, buf, len, &w, &h, &xres, &yres, &cspace);
 		break;
 	case FZ_IMAGE_JPEG:
-		fz_load_jpeg_info(ctx, buf, len, &w, &h, &xres, &yres, &cspace);
+		fz_load_jpeg_info(ctx, buf, len, &w, &h, &xres, &yres, &cspace, &orientation);
 		break;
 	case FZ_IMAGE_PNG:
 		fz_load_png_info(ctx, buf, len, &w, &h, &xres, &yres, &cspace);
@@ -1259,6 +1248,7 @@ fz_new_image_from_buffer(fz_context *ctx, fz_buffer *buffer)
 		if (type == FZ_IMAGE_JPEG)
 			bc->params.u.jpeg.color_transform = -1;
 		image = fz_new_image_from_compressed_buffer(ctx, w, h, bpc, cspace, xres, yres, 0, 0, NULL, NULL, bc, NULL);
+		image->orientation = orientation;
 	}
 	fz_always(ctx)
 		fz_drop_colorspace(ctx, cspace);
@@ -1324,6 +1314,63 @@ fz_image_resolution(fz_image *image, int *xres, int *yres)
 			*yres = SANE_DPI;
 		}
 	}
+}
+
+uint8_t fz_image_orientation(fz_context *ctx, fz_image *image)
+{
+	return image ? image->orientation : 0;
+}
+
+fz_matrix fz_image_orientation_matrix(fz_context *ctx, fz_image *image)
+{
+	fz_matrix m;
+
+	switch (image ? image->orientation : 0)
+	{
+	case 0:
+	case 1: /* 0 degree rotation */
+		m.a =  1; m.b =  0;
+		m.c =  0; m.d =  1;
+		m.e =  0; m.f =  0;
+		break;
+	case 2: /* 90 degree ccw */
+		m.a =  0; m.b = -1;
+		m.c =  1; m.d =  0;
+		m.e =  0; m.f =  1;
+		break;
+	case 3: /* 180 degree ccw */
+		m.a = -1; m.b =  0;
+		m.c =  0; m.d = -1;
+		m.e =  1; m.f =  1;
+		break;
+	case 4: /* 270 degree ccw */
+		m.a =  0; m.b =  1;
+		m.c = -1; m.d =  0;
+		m.e =  1; m.f =  0;
+		break;
+	case 5: /* flip on X */
+		m.a = -1; m.b = 0;
+		m.c =  0; m.d = 1;
+		m.e =  1; m.f = 0;
+		break;
+	case 6: /* flip on X, then rotate ccw by 90 degrees */
+		m.a =  0; m.b =  1;
+		m.c =  1; m.d =  0;
+		m.e =  0; m.f =  0;
+		break;
+	case 7: /* flip on X, then rotate ccw by 180 degrees */
+		m.a =  1; m.b =  0;
+		m.c =  0; m.d = -1;
+		m.e =  0; m.f =  1;
+		break;
+	case 8: /* flip on X, then rotate ccw by 270 degrees */
+		m.a =  0; m.b = -1;
+		m.c = -1; m.d =  0;
+		m.e =  1; m.f =  1;
+		break;
+	}
+
+	return m;
 }
 
 typedef struct fz_display_list_image_s

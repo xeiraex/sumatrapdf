@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 // Common for EnginePdf.cpp and EngineXps.cpp
@@ -27,22 +27,24 @@ struct FitzImagePos {
 };
 
 struct FzPageInfo {
-    int pageNo = 0; // 1-based
-    fz_page* page = nullptr;
+    int pageNo{0}; // 1-based
+    fz_page* page{nullptr};
 
-    fz_link* links = nullptr;
+    fz_link* links{nullptr};
 
     // auto-detected links
     Vec<IPageElement*> autoLinks;
     // comments are made out of annotations
     Vec<IPageElement*> comments;
 
-    RectF mediabox = {};
+    RectF mediabox{};
     Vec<FitzImagePos> images;
 
     // if false, only loaded page (fast)
     // if true, loaded expensive info (extracted text etc.)
-    bool fullyLoaded = false;
+    bool fullyLoaded{false};
+
+    bool commentsNeedRebuilding{false};
 };
 
 struct LinkRectList {
@@ -85,5 +87,4 @@ fz_image* fz_find_image_at_idx(fz_context* ctx, FzPageInfo* pageInfo, int idx);
 void fz_find_image_positions(fz_context* ctx, Vec<FitzImagePos>& images, fz_stext_page* stext);
 
 // float is in range 0...1
-COLORREF FromPdfColor(fz_context* ctx, int n, float color[4]);
-int ToPdfRgba(COLORREF c, float col[4]);
+COLORREF ColorRefFromPdfFloat(fz_context* ctx, int n, float color[4]);

@@ -12,6 +12,7 @@ typedef struct fz_tuning_context fz_tuning_context;
 typedef struct fz_store fz_store;
 typedef struct fz_glyph_cache fz_glyph_cache;
 typedef struct fz_document_handler_context fz_document_handler_context;
+typedef struct fz_output fz_output;
 typedef struct fz_context fz_context;
 
 /**
@@ -189,6 +190,9 @@ fz_context *fz_clone_context(fz_context *ctx);
 	The context and all of its global state is freed, and any
 	buffered warnings are flushed (see fz_flush_warnings). If NULL
 	is passed in nothing will happen.
+
+	Must not be called for a context that is being used in an active
+	fz_try(), fz_always() or fz_catch() block.
 */
 void fz_drop_context(fz_context *ctx);
 
@@ -424,6 +428,15 @@ void fz_disable_icc(fz_context *ctx);
 	((TYPE*)Memento_label(fz_calloc(CTX, 1, sizeof(TYPE)), #TYPE))
 
 /**
+	Allocate memory for an array of structures, clear it, and tag
+	the pointer for Memento.
+
+	Throws exception in the event of failure to allocate.
+*/
+#define fz_malloc_struct_array(CTX, N, TYPE) \
+	((TYPE*)Memento_label(fz_calloc(CTX, N, sizeof(TYPE)), #TYPE "[]"))
+
+/**
 	Allocate uninitialized memory for an array of structures, and
 	tag the pointer for Memento. Does NOT clear the memory!
 
@@ -568,6 +581,7 @@ struct fz_context
 	fz_tuning_context *tuning;
 
 	/* shared contexts */
+	fz_output *stddbg;
 	fz_font_context *font;
 	fz_colorspace_context *colorspace;
 	fz_store *store;
@@ -611,6 +625,21 @@ fz_keep_imp(fz_context *ctx, void *p, int *refs)
 			++*refs;
 		}
 		fz_unlock(ctx, FZ_LOCK_ALLOC);
+	}
+	return p;
+}
+
+static inline void *
+fz_keep_imp_locked(fz_context *ctx FZ_UNUSED, void *p, int *refs)
+{
+	if (p)
+	{
+		(void)Memento_checkIntPointerOrNull(refs);
+		if (*refs > 0)
+		{
+			(void)Memento_takeRef(p);
+			++*refs;
+		}
 	}
 	return p;
 }

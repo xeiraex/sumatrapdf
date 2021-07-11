@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "BaseUtil.h"
@@ -37,6 +37,14 @@ Slice::Slice(const Slice& other) {
     this->begin = other.begin;
     this->end = other.end;
     this->curr = other.curr;
+}
+
+Slice& Slice::operator=(const Slice& other) {
+    CrashIf(this == &other);
+    this->begin = other.begin;
+    this->end = other.end;
+    this->curr = other.curr;
+    return *this;
 }
 
 size_t Slice::Left() const {

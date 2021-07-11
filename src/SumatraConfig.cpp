@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -53,29 +53,11 @@ const char* gitSha1 = QM(GIT_COMMIT_ID);
 const char* gitSha1 = nullptr;
 #endif
 
-#if defined(DEBUG) || defined(PRE_RELEASE_VER) || defined(RAMICRO)
-bool gWithTocEditor = true;
-#else
-bool gWithTocEditor = false;
-#endif
-
-#if defined(RAMICRO)
-bool gIsRaMicroBuild = true;
-#else
-bool gIsRaMicroBuild = false;
-#endif
-
 // experimental, unfinished theme support for menus by making them owner-drawn
 #if defined(EXP_MENU_OWNER_DRAW)
 bool gOwnerDrawMenu = true;
 #else
 bool gOwnerDrawMenu = false;
-#endif
-
-#if defined(DEBUG) || defined(PRE_RELEASE_VER)
-bool gShowDebugMenu = true;
-#else
-bool gShowDebugMenu = false;
 #endif
 
 #ifdef DISABLE_DOCUMENT_RESTRICTIONS
@@ -85,22 +67,13 @@ bool gDisableDocumentRestrictions = false;
 #endif
 
 const WCHAR* GetAppName() {
-    if (gIsRaMicroBuild) {
-        return L"RA-MICRO PDF Viewer";
-    }
     return L"SumatraPDF";
 }
 
 const WCHAR* GetExeName() {
-    if (gIsRaMicroBuild) {
-        return L"RA-MICRO PDF Viewer.exe";
-    }
     return L"SumatraPDF.exe";
 }
 
 int GetAppIconID() {
-    if (gIsRaMicroBuild) {
-        return IDI_RAMICRO;
-    }
     return IDI_SUMATRAPDF;
 }

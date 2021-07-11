@@ -383,7 +383,7 @@ static struct {
 	char *maxlayoutfilename;
 } timing;
 
-static void usage(void)
+static int usage(void)
 {
 	fprintf(stderr,
 		"mudraw version " FZ_VERSION "\n"
@@ -394,11 +394,11 @@ static void usage(void)
 		"\t-F -\toutput format (default inferred from output file name)\n"
 		"\t\traster: png, pnm, pam, pbm, pkm, pwg, pcl, ps\n"
 		"\t\tvector: svg, pdf, trace, ocr.trace\n"
-		"\t\ttext: txt, html, xhtml, stext\n"
+		"\t\ttext: txt, html, xhtml, stext, stext.json\n"
 #ifndef OCR_DISABLED
-		"\t\tocr'd text: ocr.txt, ocr.html, ocr.xhtml, ocr.stext\n"
+		"\t\tocr'd text: ocr.txt, ocr.html, ocr.xhtml, ocr.stext, ocr.stext.json\n"
 #else
-		"\t\tocr'd text: ocr.txt, ocr.html, ocr.xhtml, ocr.stext (disabled)\n"
+		"\t\tocr'd text: ocr.txt, ocr.html, ocr.xhtml, ocr.stext, ocr.stext.json (disabled)\n"
 #endif
 		"\t\tbitmap-wrapped-as-pdf: pclm, ocr.pdf\n"
 		"\n"
@@ -467,7 +467,7 @@ static void usage(void)
 		"\n"
 		"\tpages\tcomma separated list of page numbers and ranges\n"
 		);
-	exit(1);
+	return 1;
 }
 
 static int gettime(void)
@@ -737,10 +737,11 @@ static void dodrawpage(fz_context *ctx, fz_page *page, fz_display_list *list, in
 						output_format == OUT_OCR_HTML ||
 						output_format == OUT_OCR_XHTML
 						) ? FZ_STEXT_PRESERVE_IMAGES : 0;
+			stext_options.flags |= FZ_STEXT_MEDIABOX_CLIP;
 			if (output_format == OUT_STEXT_JSON || output_format == OUT_OCR_STEXT_JSON)
 				stext_options.flags |= FZ_STEXT_PRESERVE_SPANS;
 			text = fz_new_stext_page(ctx, mediabox);
-			dev = fz_new_stext_device(ctx,  text, &stext_options);
+			dev = fz_new_stext_device(ctx, text, &stext_options);
 			if (lowmemory)
 				fz_enable_device_hints(ctx, dev, FZ_NO_CACHE);
 			if (output_format == OUT_OCR_TEXT ||
@@ -1816,7 +1817,7 @@ int mudraw_main(int argc, char **argv)
 	{
 		switch (c)
 		{
-		default: usage(); break;
+		default: return usage();
 
 		case 'q': quiet = 1; break;
 
@@ -1908,7 +1909,7 @@ int mudraw_main(int argc, char **argv)
 	}
 
 	if (fz_optind == argc)
-		usage();
+		return usage();
 
 	if (num_workers > 0)
 	{
@@ -2497,10 +2498,9 @@ int mudraw_main(int argc, char **argv)
 
 	if (trace_info.mem_limit || trace_info.alloc_limit || showmemory)
 	{
-		char buf[100];
-		fz_snprintf(buf, sizeof buf, "Memory use total=%zu peak=%zu current=%zu", trace_info.total, trace_info.peak, trace_info.current);
-		fz_snprintf(buf, sizeof buf, "Allocations total=%zu", trace_info.allocs);
-		fprintf(stderr, "%s\n", buf);
+		char buf[200];
+		fz_snprintf(buf, sizeof buf, "Memory use total=%zu peak=%zu current=%zu\nAllocations total=%zu\n", trace_info.total, trace_info.peak, trace_info.current, trace_info.allocs);
+		fprintf(stderr, "%s", buf);
 	}
 
 	return (errored != 0);

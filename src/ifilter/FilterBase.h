@@ -14,16 +14,16 @@
 #include <filter.h>
 #include <filterr.h>
 
-class CChunkValue
+class ChunkValue
 {
 public:
-    CChunkValue() : m_fIsValid(false), m_pszValue(nullptr)
+    ChunkValue() : m_fIsValid(false), m_pszValue(nullptr)
     {
         PropVariantInit(&m_propVariant);
         Clear();
     }
 
-    ~CChunkValue() { Clear(); };
+    ~ChunkValue() { Clear(); };
 
     void Clear()
     {
@@ -126,7 +126,7 @@ private:
 
 };
 
-inline HRESULT CChunkValue::SetChunk(REFPROPERTYKEY pkey,
+inline HRESULT ChunkValue::SetChunk(REFPROPERTYKEY pkey,
                                      CHUNKSTATE chunkType/*=CHUNK_VALUE*/,
                                      LCID locale /*=0*/,
                                      DWORD cwcLenSource /*=0*/,
@@ -147,7 +147,7 @@ inline HRESULT CChunkValue::SetChunk(REFPROPERTYKEY pkey,
     return S_OK;
 }
 
-class CFilterBase : public IFilter, public IInitializeWithStream, public IPersistStream, public IPersistFile
+class FilterBase : public IFilter, public IInitializeWithStream, public IPersistStream, public IPersistFile
 {
 public:
     // OnInit() is called when the IFilter is initialized (at the end of IFilter::Init)
@@ -156,18 +156,18 @@ public:
     // When GetNextChunkValue() is called you should fill in the ChunkValue by calling SetXXXValue() with the property.
     // example:  chunkValue.SetTextValue(PKYE_ItemName, L"foo bar");
     // return FILTER_E_END_OF_CHUNKS when there are no more chunks
-    virtual HRESULT GetNextChunkValue(CChunkValue &chunkValue) = 0;
+    virtual HRESULT GetNextChunkValue(ChunkValue &chunkValue) = 0;
 
 protected:
     inline DWORD GetChunkId() const { return m_dwChunkId; }
 
 public:
-    CFilterBase(long *plRefCount) : m_lRef(1), m_plModuleRef(plRefCount),
+    FilterBase(long *plRefCount) : m_lRef(1), m_plModuleRef(plRefCount),
         m_dwChunkId(0), m_iText(0), m_pStream(nullptr) {
         InterlockedIncrement(m_plModuleRef);
     }
 
-    virtual ~CFilterBase() {
+    virtual ~FilterBase() {
         if (m_pStream)
             m_pStream->Release();
         InterlockedDecrement(m_plModuleRef);
@@ -176,11 +176,11 @@ public:
     // IUnknown
     IFACEMETHODIMP QueryInterface(REFIID riid, void **ppv) {
         static const QITAB qit[] = {
-            QITABENT(CFilterBase, IPersistStream),
-            QITABENT(CFilterBase, IPersistFile),
-            QITABENTMULTI(CFilterBase, IPersist, IPersistStream),
-            QITABENT(CFilterBase, IInitializeWithStream),
-            QITABENT(CFilterBase, IFilter),
+            QITABENT(FilterBase, IPersistStream),
+            QITABENT(FilterBase, IPersistFile),
+            QITABENTMULTI(FilterBase, IPersist, IPersistStream),
+            QITABENT(FilterBase, IInitializeWithStream),
+            QITABENT(FilterBase, IFilter),
             { 0 }
         };
         return QISearch(this, qit, riid, ppv);
@@ -324,7 +324,7 @@ private:
     DWORD                       m_dwChunkId;
     DWORD                       m_iText;
 
-    CChunkValue                 m_currentChunk;
+    ChunkValue                 m_currentChunk;
 };
 
 #endif

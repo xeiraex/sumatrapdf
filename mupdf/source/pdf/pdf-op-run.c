@@ -208,13 +208,22 @@ pdf_show_shade(fz_context *ctx, pdf_run_processor *pr, fz_shade *shd)
 
 	bbox = fz_bound_shade(ctx, shd, gstate->ctm);
 
-	gstate = pdf_begin_group(ctx, pr, bbox, &softmask);
+	fz_try(ctx)
+	{
+		gstate = pdf_begin_group(ctx, pr, bbox, &softmask);
 
-	/* FIXME: The gstate->ctm in the next line may be wrong; maybe
-	 * it should be the parent gstates ctm? */
-	fz_fill_shade(ctx, pr->dev, shd, gstate->ctm, gstate->fill.alpha, gstate->fill.color_params);
+		/* FIXME: The gstate->ctm in the next line may be wrong; maybe
+		 * it should be the parent gstates ctm? */
+		fz_fill_shade(ctx, pr->dev, shd, gstate->ctm, gstate->fill.alpha, gstate->fill.color_params);
 
-	pdf_end_group(ctx, pr, &softmask);
+		pdf_end_group(ctx, pr, &softmask);
+	}
+	fz_catch(ctx)
+	{
+		pdf_drop_obj(ctx, softmask.softmask);
+		pdf_drop_obj(ctx, softmask.page_resources);
+		fz_rethrow(ctx);
+	}
 }
 
 static pdf_material *
@@ -542,9 +551,18 @@ pdf_show_image(fz_context *ctx, pdf_run_processor *pr, fz_image *image)
 	else
 	{
 		softmask_save softmask = { NULL };
-		gstate = pdf_begin_group(ctx, pr, bbox, &softmask);
-		pdf_show_image_imp(ctx, pr, image, image_ctm, bbox);
-		pdf_end_group(ctx, pr, &softmask);
+		fz_try(ctx)
+		{
+			gstate = pdf_begin_group(ctx, pr, bbox, &softmask);
+			pdf_show_image_imp(ctx, pr, image, image_ctm, bbox);
+			pdf_end_group(ctx, pr, &softmask);
+		}
+		fz_catch(ctx)
+		{
+			pdf_drop_obj(ctx, softmask.softmask);
+			pdf_drop_obj(ctx, softmask.page_resources);
+			fz_rethrow(ctx);
+		}
 	}
 }
 
@@ -682,6 +700,8 @@ pdf_show_path(fz_context *ctx, pdf_run_processor *pr, int doclose, int dofill, i
 	}
 	fz_catch(ctx)
 	{
+		pdf_drop_obj(ctx, softmask.softmask);
+		pdf_drop_obj(ctx, softmask.page_resources);
 		fz_rethrow(ctx);
 	}
 }
@@ -833,6 +853,8 @@ pdf_flush_text(fz_context *ctx, pdf_run_processor *pr)
 	}
 	fz_catch(ctx)
 	{
+		pdf_drop_obj(ctx, softmask.softmask);
+		pdf_drop_obj(ctx, softmask.page_resources);
 		fz_rethrow(ctx);
 	}
 
@@ -930,7 +952,11 @@ show_string(fz_context *ctx, pdf_run_processor *pr, unsigned char *buf, size_t l
 		else
 			fz_warn(ctx, "cannot encode character");
 		if (cpt == 32 && w == 1)
+		{
+			/* Bug 703151: pdf_show_char can realloc gstate. */
+			gstate = pr->gstate + pr->gtop;
 			pdf_show_space(ctx, pr, gstate->text.word_space);
+		}
 	}
 }
 
@@ -2171,7 +2197,7 @@ pdf_new_run_processor(fz_context *ctx, fz_device *dev, fz_matrix ctm, const char
 		proc->path = fz_new_path(ctx);
 
 		proc->gcap = 64;
-		proc->gstate = fz_calloc(ctx, proc->gcap, sizeof(pdf_gstate));
+		proc->gstate = fz_malloc_struct_array(ctx, proc->gcap, pdf_gstate);
 
 		proc->gtop = 0;
 		pdf_init_gstate(ctx, &proc->gstate[0], ctm);

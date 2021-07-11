@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 namespace str {
@@ -13,6 +13,7 @@ struct Slice {
     Slice(char* s, size_t len);
     Slice(char* start, char* end);
     Slice(const Slice& other);
+    Slice& operator=(const Slice&);
 
     void Set(char* s, size_t len);
 

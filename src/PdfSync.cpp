@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -130,7 +130,7 @@ int Synchronizer::Create(const WCHAR* pdffilename, EngineBase* engine, Synchroni
         return PDFSYNCERR_INVALID_ARGUMENT;
     }
 
-    AutoFreeWstr baseName(str::DupN(pdffilename, fileExt - pdffilename));
+    AutoFreeWstr baseName(str::Dup(pdffilename, fileExt - pdffilename));
 
     // Check if a PDFSYNC file is present
     AutoFreeWstr syncFile(str::Join(baseName, PDFSYNC_EXTENSION));
@@ -283,7 +283,7 @@ int Pdfsync::RebuildIndex() {
                 // if the filename contains quotes then remove them
                 // TODO: this should never happen!?
                 if (filename[0] == '"' && filename[str::Len(filename) - 1] == '"') {
-                    filename.Set(str::DupN(filename + 1, str::Len(filename) - 2));
+                    filename.Set(str::Dup(filename + 1, str::Len(filename) - 2));
                 }
                 // undecorate the filepath: replace * by space and / by \ (backslash)
                 str::TransChars(filename, L"*/", L" \\");
@@ -515,7 +515,7 @@ int SyncTex::RebuildIndex() {
     synctex_scanner_free(scanner);
     scanner = nullptr;
 
-    AutoFree syncfname(strconv::WstrToAnsi(syncfilepath));
+    AutoFree syncfname(strconv::WstrToAnsiV(syncfilepath));
     if (!syncfname.Get()) {
         return PDFSYNCERR_OUTOFMEMORY;
     }
@@ -599,7 +599,7 @@ int SyncTex::SourceToDoc(const WCHAR* srcfilename, UINT line, UINT col, UINT* pa
     }
 
     bool isUtf8 = true;
-    const char* mb_srcfilepath = strconv::WstrToUtf8(srcfilepath).data();
+    char* mb_srcfilepath = strconv::WstrToUtf8(srcfilepath);
 TryAgainAnsi:
     if (!mb_srcfilepath) {
         return PDFSYNCERR_OUTOFMEMORY;
@@ -609,7 +609,7 @@ TryAgainAnsi:
     // recent SyncTeX versions encode in UTF-8 instead of ANSI
     if (isUtf8 && -1 == ret) {
         isUtf8 = false;
-        mb_srcfilepath = (char*)strconv::WstrToAnsi(srcfilepath).data();
+        mb_srcfilepath = (char*)strconv::WstrToAnsiV(srcfilepath).data();
         goto TryAgainAnsi;
     }
 

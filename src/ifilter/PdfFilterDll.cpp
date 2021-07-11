@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -7,30 +7,30 @@
 #include "utils/WinUtil.h"
 
 #include "FilterBase.h"
+#include "PdfFilterClsid.h"
 #include "PdfFilter.h"
-#include "CPdfFilter.h"
 #ifdef BUILD_TEX_IFILTER
-#include "CTeXFilter.h"
+#include "TeXFilter.h"
 #endif
 #ifdef BUILD_EPUB_IFILTER
-#include "CEpubFilter.h"
+#include "EpubFilter.h"
 #endif
 
 long g_lRefCount = 0;
 
-class CClassFactory : public IClassFactory {
+class FilterClassFactory : public IClassFactory {
   public:
-    CClassFactory(REFCLSID rclsid) : m_lRef(1), m_clsid(rclsid) {
+    FilterClassFactory(REFCLSID rclsid) : m_lRef(1), m_clsid(rclsid) {
         InterlockedIncrement(&g_lRefCount);
     }
 
-    ~CClassFactory() {
+    ~FilterClassFactory() {
         InterlockedDecrement(&g_lRefCount);
     }
 
     // IUnknown
     IFACEMETHODIMP QueryInterface(REFIID riid, void** ppv) {
-        static const QITAB qit[] = {QITABENT(CClassFactory, IClassFactory), {0}};
+        static const QITAB qit[] = {QITABENT(FilterClassFactory, IClassFactory), {0}};
         return QISearch(this, qit, riid, ppv);
     }
 
@@ -57,14 +57,14 @@ class CClassFactory : public IClassFactory {
 
         CLSID clsid;
         if (SUCCEEDED(CLSIDFromString(SZ_PDF_FILTER_CLSID, &clsid)) && IsEqualCLSID(m_clsid, clsid)) {
-            pFilter = new CPdfFilter(&g_lRefCount);
+            pFilter = new PdfFilter(&g_lRefCount);
 #ifdef BUILD_TEX_IFILTER
         } else if (SUCCEEDED(CLSIDFromString(SZ_TEX_FILTER_CLSID, &clsid)) && IsEqualCLSID(m_clsid, clsid)) {
-            pFilter = new CTeXFilter(&g_lRefCount);
+            pFilter = new TeXFilter(&g_lRefCount);
 #endif
 #ifdef BUILD_EPUB_IFILTER
         } else if (SUCCEEDED(CLSIDFromString(SZ_EPUB_FILTER_CLSID, &clsid)) && IsEqualCLSID(m_clsid, clsid)) {
-            pFilter = new CEpubFilter(&g_lRefCount);
+            pFilter = new EpubFilter(&g_lRefCount);
 #endif
         } else {
             return E_NOINTERFACE;
@@ -110,7 +110,7 @@ STDAPI DllCanUnloadNow(VOID) {
 
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
     *ppv = nullptr;
-    ScopedComPtr<CClassFactory> pClassFactory(new CClassFactory(rclsid));
+    ScopedComPtr<FilterClassFactory> pClassFactory(new FilterClassFactory(rclsid));
     if (!pClassFactory) {
         return E_OUTOFMEMORY;
     }

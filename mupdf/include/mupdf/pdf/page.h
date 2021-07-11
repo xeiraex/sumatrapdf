@@ -50,9 +50,9 @@ pdf_obj *pdf_page_group(fz_context *ctx, pdf_page *page);
 */
 fz_separations *pdf_page_separations(fz_context *ctx, pdf_page *page);
 
-void pdf_read_ocg(fz_context *ctx, pdf_document *doc);
+pdf_ocg_descriptor *pdf_read_ocg(fz_context *ctx, pdf_document *doc);
 void pdf_drop_ocg(fz_context *ctx, pdf_document *doc);
-int pdf_is_hidden_ocg(fz_context *ctx, pdf_ocg_descriptor *desc, pdf_obj *rdb, const char *usage, pdf_obj *ocg);
+int pdf_is_ocg_hidden(fz_context *ctx, pdf_document *doc, pdf_obj *rdb, const char *usage, pdf_obj *ocg);
 
 fz_link *pdf_load_links(fz_context *ctx, pdf_page *page);
 
@@ -94,7 +94,7 @@ void pdf_run_page(fz_context *ctx, pdf_page *page, fz_device *dev, fz_matrix ctm
 	cookie: A pointer to an optional fz_cookie structure that can be used
 	to track progress, collect errors etc.
 */
-void pdf_run_page_with_usage(fz_context *ctx, pdf_document *doc, pdf_page *page, fz_device *dev, fz_matrix ctm, const char *usage, fz_cookie *cookie);
+void pdf_run_page_with_usage(fz_context *ctx, pdf_page *page, fz_device *dev, fz_matrix ctm, const char *usage, fz_cookie *cookie);
 
 /*
 	Interpret a loaded page and render it on a device.
@@ -110,9 +110,17 @@ void pdf_run_page_with_usage(fz_context *ctx, pdf_document *doc, pdf_page *page,
 void pdf_run_page_contents(fz_context *ctx, pdf_page *page, fz_device *dev, fz_matrix ctm, fz_cookie *cookie);
 void pdf_run_page_annots(fz_context *ctx, pdf_page *page, fz_device *dev, fz_matrix ctm, fz_cookie *cookie);
 void pdf_run_page_widgets(fz_context *ctx, pdf_page *page, fz_device *dev, fz_matrix ctm, fz_cookie *cookie);
+void pdf_run_page_contents_with_usage(fz_context *ctx, pdf_page *page, fz_device *dev, fz_matrix ctm, const char *usage, fz_cookie *cookie);
+void pdf_run_page_annots_with_usage(fz_context *ctx, pdf_page *page, fz_device *dev, fz_matrix ctm, const char *usage, fz_cookie *cookie);
+void pdf_run_page_widgets_with_usage(fz_context *ctx, pdf_page *page, fz_device *dev, fz_matrix ctm, const char *usage, fz_cookie *cookie);
 
 void pdf_filter_page_contents(fz_context *ctx, pdf_document *doc, pdf_page *page, pdf_filter_options *filter);
 void pdf_filter_annot_contents(fz_context *ctx, pdf_document *doc, pdf_annot *annot, pdf_filter_options *filter);
+
+fz_pixmap *pdf_new_pixmap_from_page_contents_with_usage(fz_context *ctx, pdf_page *page, fz_matrix ctm, fz_colorspace *cs, int alpha, const char *usage);
+fz_pixmap *pdf_new_pixmap_from_page_with_usage(fz_context *ctx, pdf_page *page, fz_matrix ctm, fz_colorspace *cs, int alpha, const char *usage);
+fz_pixmap *pdf_new_pixmap_from_page_contents_with_separations_and_usage(fz_context *ctx, pdf_page *page, fz_matrix ctm, fz_colorspace *cs, fz_separations *seps, int alpha, const char *usage);
+fz_pixmap *pdf_new_pixmap_from_page_with_separations_and_usage(fz_context *ctx, pdf_page *page, fz_matrix ctm, fz_colorspace *cs, fz_separations *seps, int alpha, const char *usage);
 
 enum {
 	PDF_REDACT_IMAGE_NONE,
@@ -144,7 +152,7 @@ fz_default_colorspaces *pdf_update_default_colorspaces(fz_context *ctx, fz_defau
 struct pdf_page
 {
 	fz_page super;
-	pdf_document *doc;
+	pdf_document *doc; /* type alias for super.doc */
 	pdf_obj *obj;
 
 	int transparency;

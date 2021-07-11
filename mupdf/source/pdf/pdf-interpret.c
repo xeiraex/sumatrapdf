@@ -1,5 +1,5 @@
 #include "mupdf/fitz.h"
-#include "mupdf/pdf.h"
+#include "pdf-annot-imp.h"
 
 #include <string.h>
 #include <math.h>
@@ -325,7 +325,7 @@ pdf_process_Do(fz_context *ctx, pdf_processor *proc, pdf_csi *csi)
 	if (!pdf_is_name(ctx, subtype))
 		fz_throw(ctx, FZ_ERROR_MINOR, "no XObject subtype specified");
 
-	if (pdf_is_hidden_ocg(ctx, csi->doc->ocg, csi->rdb, proc->usage, pdf_dict_get(ctx, xobj, PDF_NAME(OC))))
+	if (pdf_is_ocg_hidden(ctx, csi->doc, csi->rdb, proc->usage, pdf_dict_get(ctx, xobj, PDF_NAME(OC))))
 		return;
 
 	if (pdf_name_eq(ctx, subtype, PDF_NAME(Form)))
@@ -497,7 +497,7 @@ pdf_process_BDC(fz_context *ctx, pdf_processor *proc, pdf_csi *csi)
 	if (strcmp(csi->name, "OC"))
 		return;
 
-	if (pdf_is_hidden_ocg(ctx, csi->doc->ocg, csi->rdb, proc->usage, csi->obj))
+	if (pdf_is_ocg_hidden(ctx, csi->doc, csi->rdb, proc->usage, csi->obj))
 		++proc->hidden;
 }
 
@@ -1071,7 +1071,7 @@ pdf_should_print_annot(fz_context *ctx, pdf_annot *annot)
 }
 
 void
-pdf_process_annot(fz_context *ctx, pdf_processor *proc, pdf_document *doc, pdf_page *page, pdf_annot *annot, fz_cookie *cookie)
+pdf_process_annot(fz_context *ctx, pdf_processor *proc, pdf_annot *annot, fz_cookie *cookie)
 {
 	int flags = pdf_dict_get_int(ctx, annot->obj, PDF_NAME(F));
 
@@ -1087,7 +1087,7 @@ pdf_process_annot(fz_context *ctx, pdf_processor *proc, pdf_document *doc, pdf_p
 		if (!strcmp(proc->usage, "Print"))
 		{
 			if (!(flags & PDF_ANNOT_IS_PRINT))
-			return;
+				return;
 			if (!pdf_should_print_annot(ctx, annot))
 				return;
 		}
@@ -1098,18 +1098,24 @@ pdf_process_annot(fz_context *ctx, pdf_processor *proc, pdf_document *doc, pdf_p
 	/* TODO: NoZoom and NoRotate */
 
 	/* XXX what resources, if any, to use for this check? */
-	if (pdf_is_hidden_ocg(ctx, doc->ocg, NULL, proc->usage, pdf_dict_get(ctx, annot->obj, PDF_NAME(OC))))
+	if (pdf_is_ocg_hidden(ctx, annot->page->doc, NULL, proc->usage, pdf_dict_get(ctx, annot->obj, PDF_NAME(OC))))
 		return;
 
-	if (proc->op_q && proc->op_cm && proc->op_Do_form && proc->op_Q && annot->ap)
+	if (proc->op_q && proc->op_cm && proc->op_Do_form && proc->op_Q)
 	{
-		fz_matrix matrix = pdf_annot_transform(ctx, annot);
+		pdf_obj *ap = pdf_annot_ap(ctx, annot);
+		fz_matrix matrix;
+
+		if (!ap)
+			return;
+
+		matrix = pdf_annot_transform(ctx, annot);
 		proc->op_q(ctx, proc);
 		proc->op_cm(ctx, proc,
 			matrix.a, matrix.b,
 			matrix.c, matrix.d,
 			matrix.e, matrix.f);
-		proc->op_Do_form(ctx, proc, NULL, annot->ap, pdf_page_resources(ctx, page));
+		proc->op_Do_form(ctx, proc, NULL, ap, pdf_page_resources(ctx, annot->page));
 		proc->op_Q(ctx, proc);
 	}
 }

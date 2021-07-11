@@ -32,14 +32,14 @@ func triggerPreRelBuild() {
 	triggerBuildWebHook("build-pre-rel")
 }
 
-func triggerRaMicroPreRelBuild() {
-	triggerBuildWebHook("build-ramicro-pre-rel")
+func triggerCodeQL() {
+	triggerBuildWebHook("codeql")
 }
 
 const (
-	githubEventNone                   = 0
-	githubEventTypeBuildPreRel        = 1
-	githubEventTypeBuildRaMicroPreRel = 2
+	githubEventNone            = 0
+	githubEventTypeBuildPreRel = 1
+	githubEventTypeCodeQL      = 3
 )
 
 //  "action": "build-pre-rel"
@@ -62,8 +62,8 @@ func getGitHubEventType() int {
 	switch js.Action {
 	case "build-pre-rel":
 		return githubEventTypeBuildPreRel
-	case "build-ramicro-pre-rel":
-		return githubEventTypeBuildRaMicroPreRel
+	case "codeql":
+		return githubEventTypeCodeQL
 	}
 	panicIf(true, "invalid js.Action of '%s'", js.Action)
 	return githubEventNone

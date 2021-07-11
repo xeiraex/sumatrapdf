@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -53,9 +53,8 @@ static void SetMaxWidthForText(HWND hwnd, const WCHAR* text, bool multiline) {
 }
 
 void TooltipCtrl::Show(std::string_view s, Rect& rc, bool multiline) {
-    WCHAR* ws = strconv::Utf8ToWstr(s);
+    auto ws = TempToWstr(s);
     Show(ws, rc, multiline);
-    free(ws);
 }
 
 void TooltipCtrl::Show(const WCHAR* text, Rect& rc, bool multiline) {

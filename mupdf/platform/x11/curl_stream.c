@@ -126,13 +126,13 @@ static size_t on_curl_header(void *ptr, size_t size, size_t nmemb, void *state_)
 	struct curlstate *state = state_;
 
 	lock(state);
-	if (strncmp(ptr, "Accept-Ranges: bytes", 20) == 0)
+	if (fz_strncasecmp(ptr, "Accept-Ranges: bytes", 20) == 0)
 	{
 		DEBUG_MESSAGE(("header arrived with Accept-Ranges!\n"));
 		state->accept_ranges = 1;
 	}
 
-	if (strncmp(ptr, "Content-Length:", 15) == 0)
+	if (fz_strncasecmp(ptr, "Content-Length:", 15) == 0)
 	{
 		char *s = ptr;
 		state->content_length = fz_atoi(s + 15);
@@ -222,6 +222,10 @@ static size_t on_curl_data(void *ptr, size_t size, size_t nmemb, void *state_)
 	 * code this to allow for curl calling us to copy smaller blocks
 	 * as they arrive. */
 	old_start = state->current_fill_start;
+	if (state->current_fill_start + size > state->buffer_max) {
+		unlock(state);
+		return 0;
+	}
 	memcpy(state->buffer + state->current_fill_start, ptr, size);
 	state->current_fill_start += size;
 	/* If we've reached the end, or at least a different block
@@ -345,11 +349,13 @@ static int cs_next(fz_context *ctx, fz_stream *stream, size_t len)
 	int block = read_point>>BLOCK_SHIFT;
 	size_t left_over = (-read_point) & (BLOCK_SIZE-1);
 	unsigned char *buf = state->public_buffer;
+	int err_type;
 
 	assert(len != 0);
 
 	stream->rp = stream->wp = buf;
 	lock(state);
+	err_type = state->complete ? FZ_ERROR_GENERIC : FZ_ERROR_TRYLATER;
 
 	/* If we got an error from the fetching thread,
 	 * throw it here (but just once). */
@@ -365,7 +371,7 @@ static int cs_next(fz_context *ctx, fz_stream *stream, size_t len)
 	{
 		unlock(state);
 		if (state->data_arrived == 0)
-			fz_throw(ctx, FZ_ERROR_TRYLATER, "read of a block we don't have (A) (offset=%ld)", read_point);
+			fz_throw(ctx, err_type, "read of a block we don't have (A) (offset=%ld)", read_point);
 		return EOF;
 	}
 
@@ -379,7 +385,7 @@ static int cs_next(fz_context *ctx, fz_stream *stream, size_t len)
 		if (read_point + len > state->current_fill_start)
 		{
 			unlock(state);
-			fz_throw(ctx, FZ_ERROR_TRYLATER, "read of a block we don't have (B) (offset=%ld)", read_point);
+			fz_throw(ctx, err_type, "read of a block we don't have (B) (offset=%ld)", read_point);
 		}
 		memcpy(buf, state->buffer + read_point, len);
 		unlock(state);
@@ -402,7 +408,7 @@ static int cs_next(fz_context *ctx, fz_stream *stream, size_t len)
 		{
 			state->next_fill_start = block<<BLOCK_SHIFT;
 			unlock(state);
-			fz_throw(ctx, FZ_ERROR_TRYLATER, "read of a block we don't have (C) (offset=%ld)", read_point);
+			fz_throw(ctx, err_type, "read of a block we don't have (C) (offset=%ld)", read_point);
 		}
 		block++;
 		memcpy(buf, state->buffer + read_point, left_over);
@@ -425,7 +431,7 @@ static int cs_next(fz_context *ctx, fz_stream *stream, size_t len)
 			stream->pos += len_read;
 			/* If we haven't fetched anything, throw. */
 			if (len_read == 0)
-				fz_throw(ctx, FZ_ERROR_TRYLATER, "read of a block we don't have (D) (offset=%ld)", read_point);
+				fz_throw(ctx, err_type, "read of a block we don't have (D) (offset=%ld)", read_point);
 			/* Otherwise, we got at least one byte, so we can safely return that. */
 			return *stream->rp++;
 		}
@@ -450,7 +456,7 @@ static int cs_next(fz_context *ctx, fz_stream *stream, size_t len)
 			stream->pos += len_read;
 			/* If we haven't fetched anything, throw. */
 			if (len_read == 0)
-				fz_throw(ctx, FZ_ERROR_TRYLATER, "read of a block we don't have (E) (offset=%ld)", read_point);
+				fz_throw(ctx, err_type, "read of a block we don't have (E) (offset=%ld)", read_point);
 			/* Otherwise, we got at least one byte, so we can safely return that. */
 			return *stream->rp++;
 		}
@@ -498,11 +504,13 @@ static void cs_seek(fz_context *ctx, fz_stream *stm, int64_t offset, int whence)
 	{
 		size_t clen;
 		int data_arrived;
+		int complete;
 		lock(state);
 		data_arrived = state->data_arrived;
 		clen = state->content_length;
+		complete = state->complete;
 		unlock(state);
-		if (!data_arrived)
+		if (!data_arrived && !complete)
 			fz_throw(ctx, FZ_ERROR_TRYLATER, "still awaiting file length");
 		stm->pos = clen + offset;
 	}
@@ -533,6 +541,9 @@ fetcher_thread(curlstate *state)
 	}
 	if (state->more_data)
 		state->more_data(state->more_data_arg, 1);
+	lock(state);
+	state->complete = 1;
+	unlock(state);
 }
 
 #ifdef _WIN32
@@ -579,6 +590,7 @@ fz_stream *fz_open_url(fz_context *ctx, const char *url, int kbps, void (*more_d
 	curl_easy_setopt(state->easy, CURLOPT_WRITEHEADER, state);
 	curl_easy_setopt(state->easy, CURLOPT_WRITEFUNCTION, on_curl_data);
 	curl_easy_setopt(state->easy, CURLOPT_WRITEDATA, state);
+	curl_easy_setopt(state->easy, CURLOPT_FAILONERROR, 1L);
 
 	/* Get only the HEAD first. */
 	state->head = 1;

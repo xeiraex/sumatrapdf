@@ -983,7 +983,10 @@ static void pdfapp_showpage(pdfapp_t *app, int loadpage, int drawpage, int repai
 			fz_strlcat(buf, buf2, MAX_TITLE);
 		}
 		else
-			sprintf(buf, "%s%s", app->doctitle, buf2);
+		{
+			fz_strlcpy(buf, app->doctitle, MAX_TITLE);
+			fz_strlcat(buf, buf2, MAX_TITLE);
+		}
 		wintitle(app, buf);
 
 		pdfapp_viewctm(&ctm, app);
@@ -1050,7 +1053,7 @@ static void pdfapp_showpage(pdfapp_t *app, int loadpage, int drawpage, int repai
 		app->duration = 0;
 		fz_page_presentation(app->ctx, app->page, &app->transition, &app->duration);
 		if (app->duration == 0)
-			app->duration = 5;
+			app->duration = app->presentation_time_in_seconds;
 		app->in_transit = fz_generate_transition(app->ctx, app->image, app->old_image, app->new_image, 0, &app->transition);
 		if (!app->in_transit)
 		{
@@ -1545,6 +1548,7 @@ void pdfapp_onkey(pdfapp_t *app, int c, int modifiers)
 
 	case 'p':
 		app->presentation_mode = !app->presentation_mode;
+		app->presentation_time_in_seconds = (app->numberlen > 0) ? atoi(app->number) : 5;
 		break;
 
 	/*

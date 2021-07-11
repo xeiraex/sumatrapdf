@@ -607,6 +607,19 @@ select_unknown_cmap(FT_Face face)
 	return NULL;
 }
 
+static int use_s22pdf_workaround(fz_context *ctx, pdf_obj *dict, pdf_obj *descriptor)
+{
+	if (descriptor)
+	{
+		if (pdf_dict_get(ctx, dict, PDF_NAME(Encoding)) != PDF_NAME(WinAnsiEncoding))
+			return 0;
+		if (pdf_dict_get_int(ctx, descriptor, PDF_NAME(Flags)) != 4)
+			return 0;
+		return 1;
+	}
+	return 0;
+}
+
 static pdf_font_desc *
 pdf_load_simple_font(fz_context *ctx, pdf_document *doc, pdf_obj *dict)
 {
@@ -647,10 +660,7 @@ pdf_load_simple_font(fz_context *ctx, pdf_document *doc, pdf_obj *dict)
 			pdf_load_builtin_font(ctx, fontdesc, basefont, 0);
 
 		/* Some chinese documents mistakenly consider WinAnsiEncoding to be codepage 936 */
-		if (descriptor && pdf_is_string(ctx, pdf_dict_get(ctx, descriptor, PDF_NAME(FontName))) &&
-			!pdf_dict_get(ctx, dict, PDF_NAME(ToUnicode)) &&
-			pdf_name_eq(ctx, pdf_dict_get(ctx, dict, PDF_NAME(Encoding)), PDF_NAME(WinAnsiEncoding)) &&
-			pdf_dict_get_int(ctx, descriptor, PDF_NAME(Flags)) == 4)
+		if (use_s22pdf_workaround(ctx, dict, descriptor))
 		{
 			char *cp936fonts[] = {
 				"\xCB\xCE\xCC\xE5", "SimSun,Regular",
@@ -684,6 +694,9 @@ pdf_load_simple_font(fz_context *ctx, pdf_document *doc, pdf_obj *dict)
 		/* Encoding */
 
 		symbolic = fontdesc->flags & 4;
+		/* Bug 703273: If non-symbolic, we're not symbolic. */
+		if (fontdesc->flags & 32)
+			symbolic = 0;
 
 		if (kind == TYPE1)
 			cmap = select_type1_cmap(face);
@@ -1020,10 +1033,10 @@ load_cid_font(fz_context *ctx, pdf_document *doc, pdf_obj *dict, pdf_obj *encodi
 			cidinfo = pdf_dict_get(ctx, dict, PDF_NAME(CIDSystemInfo));
 			if (cidinfo)
 			{
-			reg = pdf_dict_get_string(ctx, cidinfo, PDF_NAME(Registry), NULL);
-			ord = pdf_dict_get_string(ctx, cidinfo, PDF_NAME(Ordering), NULL);
-			fz_snprintf(collection, sizeof collection, "%s-%s", reg, ord);
-		}
+				reg = pdf_dict_get_string(ctx, cidinfo, PDF_NAME(Registry), NULL);
+				ord = pdf_dict_get_string(ctx, cidinfo, PDF_NAME(Ordering), NULL);
+				fz_snprintf(collection, sizeof collection, "%s-%s", reg, ord);
+			}
 			else
 			{
 				fz_warn(ctx, "CIDFont is missing CIDSystemInfo dictionary; assuming Adobe-Identity");
@@ -1294,9 +1307,8 @@ pdf_load_font_descriptor(fz_context *ctx, pdf_document *doc, pdf_font_desc *font
 	}
 	else
 	{
-		/* sumatrapdf: https://github.com/sumatrapdfreader/sumatrapdf/commit/0c8b5a04ad9ee13584f88e3f055a83b82d65a6ca */
 		if (!iscidfont && fontname != pdf_clean_font_name(fontname))
-			pdf_load_builtin_font(ctx, fontdesc, fontname, 0);
+			pdf_load_builtin_font(ctx, fontdesc, fontname, 1);
 		else
 			pdf_load_system_font(ctx, fontdesc, fontname, collection);
 	}

@@ -134,4 +134,19 @@ public class PDFDocument extends Document
 	public native int validateChangeHistory();
 	public native boolean wasPureXFA();
 	public native boolean wasLinearized();
+
+	public native void enableJournal();
+
+	public native int undoRedoPosition();
+	public native int undoRedoSteps();
+	public native String undoRedoStep(int step);
+
+	public native boolean canUndo();
+	public native boolean canRedo();
+	public native void undo();
+	public native void redo();
+
+	public native void beginOperation(String operation);
+	public native void beginImplicitOperation();
+	public native void endOperation();
 }

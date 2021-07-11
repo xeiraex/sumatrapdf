@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 extern "C" {
@@ -25,6 +25,7 @@ extern "C" {
 #include "Annotation.h"
 #include "EngineBase.h"
 #include "EngineFzUtil.h"
+#include "EnginePdfImpl.h"
 #include "EnginePdf.h"
 
 // in mupdf_load_system_font.c
@@ -34,6 +35,13 @@ extern "C" void pdf_install_load_system_font_funcs(fz_context* ctx);
 AnnotationType AnnotationTypeFromPdfAnnot(enum pdf_annot_type tp);
 
 Kind kindEnginePdf = "enginePdf";
+
+EnginePdf* AsEnginePdf(EngineBase* engine) {
+    if (!engine || !IsOfKind(engine, kindEnginePdf)) {
+        return nullptr;
+    }
+    return (EnginePdf*)engine;
+}
 
 static fz_link* FixupPageLinks(fz_link* root) {
     // Links in PDF documents are added from bottom-most to top-most,
@@ -250,7 +258,7 @@ WStrVec* BuildPageLabelVec(fz_context* ctx, pdf_obj* root, int pageCount) {
             do {
                 unique.Set(str::Format(L"%s.%d", dups.at(i), ++counter));
             } while (labels->Contains(unique));
-            str::ReplacePtr(&labels->at(idx), unique);
+            str::ReplaceWithCopy(&labels->at(idx), unique);
         }
         nDups = dups.isize();
         for (; i + 1 < nDups && str::Eq(dups.at(i), dups.at(i + 1)); i++) {
@@ -296,82 +304,6 @@ struct PageTreeStackItem {
         this->len = pdf_array_len(ctx, kids);
         this->next_page_no = next_page_no;
     }
-};
-
-class EnginePdf : public EngineBase {
-  public:
-    EnginePdf();
-    ~EnginePdf() override;
-    EngineBase* Clone() override;
-
-    RectF PageMediabox(int pageNo) override;
-    RectF PageContentBox(int pageNo, RenderTarget target = RenderTarget::View) override;
-
-    RenderedBitmap* RenderPage(RenderPageArgs& args) override;
-
-    RectF Transform(const RectF& rect, int pageNo, float zoom, int rotation, bool inverse = false) override;
-
-    std::span<u8> GetFileData() override;
-    bool SaveFileAs(const char* copyFileName, bool includeUserAnnots = false) override;
-    bool SaveFileAsPdf(const char* pdfFileName, bool includeUserAnnots = false);
-    PageText ExtractPageText(int pageNo) override;
-
-    bool HasClipOptimizations(int pageNo) override;
-    WCHAR* GetProperty(DocumentProperty prop) override;
-
-    bool BenchLoadPage(int pageNo) override;
-
-    Vec<IPageElement*>* GetElements(int pageNo) override;
-    IPageElement* GetElementAtPos(int pageNo, PointF pt) override;
-    RenderedBitmap* GetImageForPageElement(IPageElement*) override;
-
-    PageDestination* GetNamedDest(const WCHAR* name) override;
-    TocTree* GetToc() override;
-
-    WCHAR* GetPageLabel(int pageNo) const override;
-    int GetPageByLabel(const WCHAR* label) const override;
-
-    int GetAnnotations(Vec<Annotation*>* annotsOut);
-
-    static EngineBase* CreateFromFile(const WCHAR* path, PasswordUI* pwdUI);
-    static EngineBase* CreateFromStream(IStream* stream, PasswordUI* pwdUI);
-
-    // make sure to never ask for pagesAccess in an ctxAccess
-    // protected critical section in order to avoid deadlocks
-    CRITICAL_SECTION* ctxAccess;
-    CRITICAL_SECTION pagesAccess;
-
-    CRITICAL_SECTION mutexes[FZ_LOCK_MAX];
-
-    RenderedBitmap* GetPageImage(int pageNo, RectF rect, int imageIdx);
-
-    fz_context* ctx = nullptr;
-    fz_locks_context fz_locks_ctx;
-    fz_document* _doc = nullptr;
-    fz_stream* _docStream = nullptr;
-    Vec<FzPageInfo> _pages;
-    fz_outline* outline = nullptr;
-    fz_outline* attachments = nullptr;
-    pdf_obj* _info = nullptr;
-    WStrVec* _pageLabels = nullptr;
-
-    TocTree* tocTree = nullptr;
-
-    bool Load(const WCHAR* filePath, PasswordUI* pwdUI = nullptr);
-    bool Load(IStream* stream, PasswordUI* pwdUI = nullptr);
-    // TODO(port): fz_stream can no-longer be re-opened (fz_clone_stream)
-    // bool Load(fz_stream* stm, PasswordUI* pwdUI = nullptr);
-    bool LoadFromStream(fz_stream* stm, PasswordUI* pwdUI = nullptr);
-    bool FinishLoading();
-
-    FzPageInfo* GetFzPageInfoFast(int pageNo);
-    FzPageInfo* GetFzPageInfo(int pageNo, bool loadQuick);
-    fz_matrix viewctm(int pageNo, float zoom, int rotation);
-    fz_matrix viewctm(fz_page* page, float zoom, int rotation);
-    TocItem* BuildTocTree(TocItem* parent, fz_outline* outline, int& idCounter, bool isAttachment);
-    WCHAR* ExtractFontList();
-
-    std::span<u8> LoadStreamFromPDFFile(const WCHAR* filePath);
 };
 
 // https://github.com/sumatrapdfreader/sumatrapdf/issues/1336
@@ -448,6 +380,10 @@ EnginePdf::~EnginePdf() {
     fz_drop_outline(ctx, outline);
     fz_drop_outline(ctx, attachments);
     pdf_drop_obj(ctx, _info);
+
+    if (_doc) {
+        pdf_drop_page_tree(ctx, pdf_document_from_fz_document(ctx, _doc));
+    }
 
     fz_drop_document(ctx, _doc);
     drop_cached_fonts_for_ctx(ctx);
@@ -714,7 +650,7 @@ bool EnginePdf::LoadFromStream(fz_stream* stm, PasswordUI* pwdUI) {
         // older Acrobat versions seem to have considered passwords to be in codepage 1252
         // note: such passwords aren't portable when stored as Unicode text
         if (!ok && GetACP() != 1252) {
-            AutoFree pwd_ansi(strconv::WstrToAnsi(pwd));
+            AutoFree pwd_ansi(strconv::WstrToAnsiV(pwd));
             AutoFreeWstr pwd_cp1252(strconv::FromCodePage(pwd_ansi.Get(), 1252));
             pwd_utf8 = strconv::WstrToUtf8(pwd_cp1252);
             ok = pdf_authenticate_password(ctx, doc, pwd_utf8.Get());
@@ -800,45 +736,72 @@ bool EnginePdf::FinishLoading() {
 
     ScopedCritSec scope(ctxAccess);
 
-    int nPages = 0;
+    bool loadPageTreeFailed = false;
     fz_try(ctx) {
         pdf_load_page_tree(ctx, doc);
-        nPages = doc->rev_page_count;
-        if (nPages != pageCount) {
-            fz_warn(ctx, "mismatch between fz_count_pages() and doc->rev_page_count");
-            return false;
-        }
     }
     fz_catch(ctx) {
+        fz_warn(ctx, "pdf_load_page_tree() failed");
+        loadPageTreeFailed = true;
+    }
+
+    int nPages = doc->rev_page_count;
+    if (nPages != pageCount) {
+        fz_warn(ctx, "mismatch between fz_count_pages() and doc->rev_page_count");
+        return false;
     }
 
     _pages.AppendBlanks(pageCount);
 
-    // this does the job of pdf_bound_page but without doing pdf_load_page()
-    pdf_rev_page_map* map = doc->rev_page_map;
-    for (int i = 0; i < nPages; i++) {
-        int pageNo = map[i].page;
-        int objNo = map[i].object;
-        fz_rect mbox{};
-        fz_matrix page_ctm{};
-        fz_try(ctx) {
-            pdf_obj* pageref = pdf_load_object(ctx, doc, objNo);
-            pdf_page_obj_transform(ctx, pageref, &mbox, &page_ctm);
-            mbox = fz_transform_rect(mbox, page_ctm);
-            pdf_drop_obj(ctx, pageref);
+    if (loadPageTreeFailed) {
+        for (int pageNo = 0; pageNo < nPages; pageNo++) {
+            FzPageInfo* pageInfo = &_pages[pageNo];
+            pageInfo->pageNo = pageNo + 1;
+            fz_rect mbox{};
+            fz_try(ctx) {
+                pdf_page* page = pdf_load_page(ctx, doc, pageNo);
+                pageInfo->page = (fz_page*)page;
+                mbox = pdf_bound_page(ctx, page);
+            }
+            fz_catch(ctx) {
+            }
+
+            if (fz_is_empty_rect(mbox)) {
+                fz_warn(ctx, "cannot find page size for page %d", pageNo);
+                mbox.x0 = 0;
+                mbox.y0 = 0;
+                mbox.x1 = 612;
+                mbox.y1 = 792;
+            }
+            pageInfo->mediabox = ToRectFl(mbox);
         }
-        fz_catch(ctx) {
+    } else {
+        // this does the job of pdf_bound_page but without doing pdf_load_page()
+        pdf_rev_page_map* map = doc->rev_page_map;
+        for (int i = 0; i < nPages; i++) {
+            int pageNo = map[i].page;
+            int objNo = map[i].object;
+            fz_rect mbox{};
+            fz_matrix page_ctm{};
+            fz_try(ctx) {
+                pdf_obj* pageref = pdf_load_object(ctx, doc, objNo);
+                pdf_page_obj_transform(ctx, pageref, &mbox, &page_ctm);
+                mbox = fz_transform_rect(mbox, page_ctm);
+                pdf_drop_obj(ctx, pageref);
+            }
+            fz_catch(ctx) {
+            }
+            if (fz_is_empty_rect(mbox)) {
+                fz_warn(ctx, "cannot find page size for page %d", i);
+                mbox.x0 = 0;
+                mbox.y0 = 0;
+                mbox.x1 = 612;
+                mbox.y1 = 792;
+            }
+            FzPageInfo* pageInfo = &_pages[pageNo];
+            pageInfo->mediabox = ToRectFl(mbox);
+            pageInfo->pageNo = pageNo + 1;
         }
-        if (fz_is_empty_rect(mbox)) {
-            fz_warn(ctx, "cannot find page size for page %d", i);
-            mbox.x0 = 0;
-            mbox.y0 = 0;
-            mbox.x1 = 612;
-            mbox.y1 = 792;
-        }
-        FzPageInfo* pageInfo = &_pages[pageNo];
-        pageInfo->mediabox = ToRectFl(mbox);
-        pageInfo->pageNo = pageNo + 1;
     }
 
     fz_try(ctx) {
@@ -923,6 +886,12 @@ bool EnginePdf::FinishLoading() {
 
     // TODO: support javascript
     CrashIf(pdf_js_supported(ctx, doc));
+
+    // TODO: better implementation
+    // we use this to check if has unsaved annotations to show a 'unsaved annotations'
+    // message on close. reset this the case of damaged documents that
+    // were fixed up by mupdf. Hopefully this doesn't mess something else
+    doc->dirty = 0;
     return true;
 }
 
@@ -974,7 +943,7 @@ TocItem* EnginePdf::BuildTocTree(TocItem* parent, fz_outline* outline, int& idCo
         CrashIf(!item->PageNumbersMatch());
 
         if (outline->n_color > 0) {
-            item->color = FromPdfColor(ctx, outline->n_color, outline->color);
+            item->color = ColorRefFromPdfFloat(ctx, outline->n_color, outline->color);
         }
 
         if (outline->down) {
@@ -1101,7 +1070,7 @@ static PageElement* makePdfCommentFromPdfAnnot(fz_context* ctx, int pageNo, pdf_
     fz_rect rect = pdf_annot_rect(ctx, annot);
     auto tp = pdf_annot_type(ctx, annot);
     const char* contents = pdf_annot_contents(ctx, annot);
-    const char* label = pdf_field_label(ctx, annot->obj);
+    const char* label = pdf_annot_field_label(ctx, annot);
     const char* s = contents;
     // TODO: use separate classes for comments and tooltips?
     if (str::IsEmpty(contents) && PDF_ANNOT_WIDGET == tp) {
@@ -1127,14 +1096,14 @@ static void MakePageElementCommentsFromAnnotations(fz_context* ctx, FzPageInfo* 
         auto tp = pdf_annot_type(ctx, annot);
         const char* contents = pdf_annot_contents(ctx, annot); // don't free
         bool isContentsEmpty = str::IsEmpty(contents);
-        const char* label = pdf_field_label(ctx, annot->obj); // don't free
+        const char* label = pdf_annot_field_label(ctx, annot); // don't free
         bool isLabelEmpty = str::IsEmpty(label);
-        int flags = pdf_field_flags(ctx, annot->obj);
+        int flags = pdf_annot_field_flags(ctx, annot);
 
         if (PDF_ANNOT_FILE_ATTACHMENT == tp) {
             dbglogf("found file attachment annotation\n");
 
-            pdf_obj* fs = pdf_dict_get(ctx, annot->obj, PDF_NAME(FS));
+            pdf_obj* fs = pdf_dict_get(ctx, pdf_annot_obj(ctx, annot), PDF_NAME(FS));
             const char* attname = pdf_embedded_file_name(ctx, fs);
             fz_rect rect = pdf_annot_rect(ctx, annot);
             if (str::IsEmpty(attname) || fz_is_empty_rect(rect) || !pdf_is_embedded_file(ctx, fs)) {
@@ -1201,6 +1170,12 @@ FzPageInfo* EnginePdf::GetFzPageInfo(int pageNo, bool loadQuick) {
     fz_page* page = pageInfo->page;
     if (!page) {
         return nullptr;
+    }
+
+    if (pageInfo->commentsNeedRebuilding) {
+        DeleteVecMembers(pageInfo->comments);
+        MakePageElementCommentsFromAnnotations(ctx, pageInfo);
+        pageInfo->commentsNeedRebuilding = false;
     }
 
     if (loadQuick || pageInfo->fullyLoaded) {
@@ -1292,12 +1267,15 @@ RectF EnginePdf::Transform(const RectF& rect, int pageNo, float zoom, int rotati
         char* name = str::Dup("");
         const WCHAR* nameW = FileName();
         if (nameW) {
-            name = (char*)strconv::WstrToUtf8(nameW).data();
+            name = strconv::WstrToUtf8(nameW);
         }
         logf("doc: %s, pageNo: %d, zoom: %.2f\n", name, pageNo, zoom);
         free(name);
     }
-    CrashIf(zoom <= 0);
+    DebugCrashIf(zoom <= 0);
+    if (zoom <= 0) {
+        zoom = 1;
+    }
     fz_matrix ctm = viewctm(pageNo, zoom, rotation);
     if (inverse) {
         ctm = fz_invert_matrix(ctm);
@@ -1368,7 +1346,7 @@ RenderedBitmap* EnginePdf::RenderPage(RenderPageArgs& args) {
         // or "Print". "Export" is not used
         dev = fz_new_draw_device(ctx, fz_identity, pix);
         pdf_document* doc = pdf_document_from_fz_document(ctx, _doc);
-        pdf_run_page_with_usage(ctx, doc, pdfpage, dev, ctm, usage, fzcookie);
+        pdf_run_page_with_usage(ctx, pdfpage, dev, ctm, usage, fzcookie);
         bitmap = new_rendered_fz_pixmap(ctx, pix);
         fz_close_device(ctx, dev);
     }
@@ -1542,8 +1520,8 @@ WCHAR* EnginePdf::ExtractFontList() {
             pdf_extract_fonts(ctx, resources, fontList, resList);
             pdf_annot* annot;
             for (annot = pdf_first_annot(ctx, page); annot; annot = pdf_next_annot(ctx, annot)) {
-                if (annot->ap) {
-                    pdf_obj* o = annot->ap;
+                pdf_obj* o = pdf_annot_ap(ctx, annot);
+                if (o) {
                     // TODO(port): not sure this is the right thing
                     resources = pdf_xobject_resources(ctx, o);
                     pdf_extract_fonts(ctx, resources, fontList, resList);
@@ -1622,7 +1600,7 @@ WCHAR* EnginePdf::ExtractFontList() {
 
         str::Str info;
         if (name[0] < 0 && MultiByteToWideChar(936, MB_ERR_INVALID_CHARS, name, -1, nullptr, 0)) {
-            info.Append(strconv::ToMultiByte(name, 936, CP_UTF8).data());
+            info.Append(strconv::ToMultiByteV(name, 936, CP_UTF8).data());
         } else {
             info.Append(name);
         }
@@ -1794,6 +1772,7 @@ const pdf_write_options pdf_default_write_options2 = {
     0,  /* do_sanitize */
     0,  /* do_appearance */
     0,  /* do_encrypt */
+    0,  /* dont_regenerate_id */
     ~0, /* permissions */
     "", /* opwd_utf8[128] */
     "", /* upwd_utf8[128] */
@@ -1804,22 +1783,23 @@ const pdf_write_options pdf_default_write_options2 = {
 // annotations).
 // if filePath is not given, we save under the same name
 // TODO: if the file is locked, this might fail.
-bool EnginePdfSaveUpdated(EngineBase* engine, std::string_view path) {
+bool EnginePdfSaveUpdated(EngineBase* engine, std::string_view path,
+                          std::function<void(std::string_view)> showErrorFunc) {
     CrashIf(!engine);
     if (!engine) {
         return false;
     }
     EnginePdf* enginePdf = (EnginePdf*)engine;
-    strconv::StackWstrToUtf8 currPath = engine->FileName();
+    TempStr currPath = TempToUtf8(engine->FileName());
     if (path.empty()) {
         path = {currPath.Get()};
     }
     fz_context* ctx = enginePdf->ctx;
     pdf_document* doc = pdf_document_from_fz_document(ctx, enginePdf->_doc);
 
-    pdf_write_options save_opts;
+    pdf_write_options save_opts{};
     save_opts = pdf_default_write_options2;
-    save_opts.do_incremental = 1;
+    save_opts.do_incremental = pdf_can_be_saved_incrementally(ctx, doc);
     save_opts.do_compress = 1;
     save_opts.do_compress_images = 1;
     save_opts.do_compress_fonts = 1;
@@ -1827,15 +1807,18 @@ bool EnginePdfSaveUpdated(EngineBase* engine, std::string_view path) {
         save_opts.do_garbage = 1;
     }
 
-    bool ok = true;
+    bool ok = false;
     fz_try(ctx) {
         pdf_save_document(ctx, doc, path.data(), &save_opts);
+        ok = true;
+        logf("Saved annotations to '%s'\n", path.data());
     }
     fz_catch(ctx) {
-        const char* errMsg = fz_caught_message(enginePdf->ctx);
-        logf("Pdf save of '%s' failed with '%s'\n", path.data(), errMsg);
-        // TODO: show error message
-        ok = false;
+        const char* mupdfErr = fz_caught_message(enginePdf->ctx);
+        logf("Saving '%s' failed with: '%s'\n", path.data(), mupdfErr);
+        if (showErrorFunc) {
+            showErrorFunc(mupdfErr);
+        }
     }
     return ok;
 }
@@ -1901,10 +1884,6 @@ int EnginePdf::GetPageByLabel(const WCHAR* label) const {
     return pageNo;
 }
 
-// in Annotation.cpp
-extern Annotation* MakeAnnotationPdf(CRITICAL_SECTION* ctxAccess, fz_context* ctx, pdf_page* page, pdf_annot* annot,
-                                     int pageNo);
-
 int EnginePdf::GetAnnotations(Vec<Annotation*>* annotsOut) {
     int nAnnots = 0;
     for (int i = 1; i <= pageCount; i++) {
@@ -1912,7 +1891,7 @@ int EnginePdf::GetAnnotations(Vec<Annotation*>* annotsOut) {
         pdf_page* pdfpage = pdf_page_from_fz_page(ctx, pi->page);
         pdf_annot* annot = pdf_first_annot(ctx, pdfpage);
         while (annot) {
-            Annotation* a = MakeAnnotationPdf(ctxAccess, ctx, pdfpage, annot, i);
+            Annotation* a = MakeAnnotationPdf(this, annot, i);
             if (a) {
                 annotsOut->Append(a);
                 nAnnots++;
@@ -1967,8 +1946,7 @@ static const char* getuser(void) {
 }
 
 Annotation* EnginePdfCreateAnnotation(EngineBase* engine, AnnotationType typ, int pageNo, PointF pos) {
-    CrashIf(engine->kind != kindEnginePdf);
-    EnginePdf* epdf = (EnginePdf*)engine;
+    EnginePdf* epdf = AsEnginePdf(engine);
     fz_context* ctx = epdf->ctx;
 
     auto pageInfo = epdf->GetFzPageInfo(pageNo, true);
@@ -2012,22 +1990,18 @@ Annotation* EnginePdfCreateAnnotation(EngineBase* engine, AnnotationType typ, in
         pdf_set_annot_border(ctx, annot, 1);
     }
 
-    pdf_update_appearance(ctx, annot);
-    auto res = MakeAnnotationPdf(epdf->ctxAccess, ctx, page, annot, pageNo);
+    pdf_update_annot(ctx, annot);
+    auto res = MakeAnnotationPdf(epdf, annot, pageNo);
     return res;
 }
 
 int EnginePdfGetAnnotations(EngineBase* engine, Vec<Annotation*>* annotsOut) {
-    CrashIf(engine->kind != kindEnginePdf);
-    EnginePdf* epdf = (EnginePdf*)engine;
+    EnginePdf* epdf = AsEnginePdf(engine);
     return epdf->GetAnnotations(annotsOut);
 }
 
 bool EnginePdfHasUnsavedAnnotations(EngineBase* engine) {
-    if (!engine || engine->kind != kindEnginePdf) {
-        return false;
-    }
-    EnginePdf* epdf = (EnginePdf*)engine;
+    EnginePdf* epdf = AsEnginePdf(engine);
     pdf_document* pdfdoc = pdf_document_from_fz_document(epdf->ctx, epdf->_doc);
     return pdfdoc->dirty;
 }
@@ -2047,11 +2021,9 @@ static bool IsAllowedAnnot(AnnotationType tp, AnnotationType* allowed) {
     return false;
 }
 
+// caller must delete
 Annotation* EnginePdfGetAnnotationAtPos(EngineBase* engine, int pageNo, PointF pos, AnnotationType* allowedAnnots) {
-    if (!engine || engine->kind != kindEnginePdf) {
-        return nullptr;
-    }
-    EnginePdf* epdf = (EnginePdf*)engine;
+    EnginePdf* epdf = AsEnginePdf(engine);
     FzPageInfo* pi = epdf->GetFzPageInfo(pageNo, true);
 
     ScopedCritSec cs(epdf->ctxAccess);
@@ -2076,7 +2048,17 @@ Annotation* EnginePdfGetAnnotationAtPos(EngineBase* engine, int pageNo, PointF p
         annot = pdf_next_annot(epdf->ctx, annot);
     }
     if (matched) {
-        return MakeAnnotationPdf(epdf->ctxAccess, epdf->ctx, pdfpage, matched, pageNo);
+        return MakeAnnotationPdf(epdf, matched, pageNo);
     }
     return nullptr;
+}
+
+void EnginePdf::InvalideAnnotationsForPage(int pageNo) {
+    ScopedCritSec scope(&pagesAccess);
+    CrashIf(pageNo < 1 || pageNo > pageCount);
+    int pageIdx = pageNo - 1;
+    FzPageInfo* pageInfo = &_pages[pageIdx];
+    if (pageInfo) {
+        pageInfo->commentsNeedRebuilding = true;
+    }
 }

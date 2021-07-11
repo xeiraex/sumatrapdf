@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -150,7 +150,7 @@ StyleRule StyleRule::Parse(const char* s, size_t len) {
 }
 
 void StyleRule::Merge(StyleRule& source) {
-    if (source.textAlign != Align_NotFound) {
+    if (source.textAlign != AlignAttr::NotFound) {
         textAlign = source.textAlign;
     }
     if (source.textIndentUnit != StyleRule::inherit) {
@@ -173,7 +173,7 @@ HtmlFormatter::HtmlFormatter(HtmlFormatterArgs* args)
 
     DrawStyle style;
     style.font = mui::GetCachedFont(defaultFontName, defaultFontSize, FontStyleRegular);
-    style.align = Align_Justify;
+    style.align = AlignAttr::Justify;
     style.dirRtl = false;
     styleStack.Append(style);
     nextPageStyle = styleStack.Last();
@@ -427,16 +427,16 @@ void HtmlFormatter::JustifyCurrLine(AlignAttr align) {
     CrashIf(currX != CurrLineDx());
 
     switch (align) {
-        case Align_Left:
+        case AlignAttr::Left:
             LayoutLeftStartingAt(0.f);
             break;
-        case Align_Right:
+        case AlignAttr::Right:
             LayoutLeftStartingAt(pageDx - currX);
             break;
-        case Align_Center:
+        case AlignAttr::Center:
             LayoutLeftStartingAt((pageDx - currX) / 2.f);
             break;
-        case Align_Justify:
+        case AlignAttr::Justify:
             JustifyLineBoth();
             break;
         default:
@@ -506,8 +506,8 @@ bool HtmlFormatter::FlushCurrLine(bool isParagraphBreak) {
         return false;
     }
     AlignAttr align = CurrStyle()->align;
-    if (isParagraphBreak && (Align_Justify == align)) {
-        align = Align_Left;
+    if (isParagraphBreak && (AlignAttr::Justify == align)) {
+        align = AlignAttr::Left;
     }
     JustifyCurrLine(align);
 
@@ -647,7 +647,7 @@ void HtmlFormatter::EmitHr() {
 void HtmlFormatter::EmitParagraph(float indent) {
     FlushCurrLine(true);
     CrashIf(NewLineX() != currX);
-    bool needsIndent = Align_Left == CurrStyle()->align || Align_Justify == CurrStyle()->align;
+    bool needsIndent = AlignAttr::Left == CurrStyle()->align || AlignAttr::Justify == CurrStyle()->align;
     if (indent > 0 && needsIndent && EnsureDx(indent)) {
         AppendInstr(DrawInstr::FixedSpace(indent));
         currX += indent;
@@ -724,7 +724,9 @@ void HtmlFormatter::EmitTextRun(const char* s, const char* end) {
             currReparseIdx = s - htmlParser->Start();
         }
 
-        size_t strLen = strconv::Utf8ToWcharBuf(s, end - s, buf, dimof(buf));
+        auto bufTmp = TempToWstr(s, end - s);
+        size_t strLen = bufTmp.size();
+        WCHAR* buf = bufTmp.Get();
         // soft hyphens should not be displayed
         strLen -= str::RemoveChars(buf, L"\xad");
         if (0 == strLen) {
@@ -826,7 +828,7 @@ static AlignAttr GetAlignAttr(HtmlToken* t, AlignAttr defVal) {
         return defVal;
     }
     AlignAttr align = FindAlignAttr(attr->val, attr->valLen);
-    if (Align_NotFound == align) {
+    if (AlignAttr::NotFound == align) {
         return defVal;
     }
     return align;
@@ -838,7 +840,7 @@ void HtmlFormatter::HandleTagP(HtmlToken* t, bool isDiv) {
         float indent = 0;
 
         StyleRule rule = ComputeStyleRule(t);
-        if (rule.textAlign != Align_NotFound) {
+        if (rule.textAlign != AlignAttr::NotFound) {
             align = rule.textAlign;
         } else if (!isDiv) {
             // prefer CSS styling to align attribute
@@ -876,7 +878,9 @@ void HtmlFormatter::HandleTagFont(HtmlToken* t) {
     AttrInfo* attr = t->GetAttrByName("face");
     const WCHAR* faceName = CurrFont()->GetName();
     if (attr) {
-        size_t strLen = strconv::Utf8ToWcharBuf(attr->val, attr->valLen, buf, dimof(buf));
+        auto bufTmp = TempToWstr(attr->val, attr->valLen);
+        WCHAR* buf = bufTmp.Get();
+        size_t strLen = bufTmp.size();
         // multiple font names can be comma separated
         if (strLen > 0 && *buf != ',') {
             str::TransChars(buf, L",", L"\0");
@@ -945,8 +949,8 @@ void HtmlFormatter::HandleTagHx(HtmlToken* t) {
         SetFontBasedOn(CurrFont(), FontStyleBold, fontSize);
 
         StyleRule rule = ComputeStyleRule(t);
-        if (Align_NotFound == rule.textAlign) {
-            rule.textAlign = GetAlignAttr(t, Align_Left);
+        if (AlignAttr::NotFound == rule.textAlign) {
+            rule.textAlign = GetAlignAttr(t, AlignAttr::Left);
         }
         CurrStyle()->align = rule.textAlign;
     }
@@ -966,7 +970,7 @@ void HtmlFormatter::HandleTagPre(HtmlToken* t) {
     FlushCurrLine(true);
     if (t->IsStartTag()) {
         SetFont(L"Courier New", (FontStyle)CurrFont()->GetStyle());
-        CurrStyle()->align = Align_Left;
+        CurrStyle()->align = AlignAttr::Left;
         preFormatted = true;
     } else if (t->IsEndTag()) {
         RevertStyleChange();
@@ -1195,7 +1199,7 @@ void HtmlFormatter::HandleHtmlTag(HtmlToken* t) {
     } else if (Tag_Center == tag) {
         HandleTagP(t, true);
         if (!t->IsEndTag()) {
-            CurrStyle()->align = Align_Center;
+            CurrStyle()->align = AlignAttr::Center;
         }
     } else if ((Tag_Ul == tag) || (Tag_Ol == tag)) {
         HandleTagList(t);
@@ -1206,7 +1210,7 @@ void HtmlFormatter::HandleHtmlTag(HtmlToken* t) {
         FlushCurrLine(true);
         ChangeFontStyle(FontStyleBold, t->IsStartTag());
         if (t->IsStartTag()) {
-            CurrStyle()->align = Align_Left;
+            CurrStyle()->align = AlignAttr::Left;
         }
     } else if (Tag_Dd == tag) {
         // TODO: separate indentation from list depth
@@ -1218,7 +1222,7 @@ void HtmlFormatter::HandleHtmlTag(HtmlToken* t) {
         // display tables row-by-row for now
         FlushCurrLine(true);
         if (t->IsStartTag()) {
-            SetAlignment(Align_Left);
+            SetAlignment(AlignAttr::Left);
         } else if (t->IsEndTag()) {
             RevertStyleChange();
         }
@@ -1402,8 +1406,6 @@ void DrawHtmlPage(Graphics* g, mui::ITextRender* textDraw, Vec<DrawInstr>* drawI
     // Pen linePen(Color(0, 0, 0), 2.f);
     Pen linePen(Color(0x5F, 0x4B, 0x32), 2.f);
 
-    WCHAR buf[512];
-
     // GDI text rendering suffers terribly if we call GetHDC()/ReleaseHDC() around every
     // draw, so first draw text and then paint everything else
     textDraw->SetTextColor(textColor);
@@ -1416,7 +1418,8 @@ void DrawHtmlPage(Graphics* g, mui::ITextRender* textDraw, Vec<DrawInstr>* drawI
         bbox.x += offX;
         bbox.y += offY;
         if (DrawInstrType::String == i.type || DrawInstrType::RtlString == i.type) {
-            size_t strLen = strconv::Utf8ToWcharBuf(i.str.s, i.str.len, buf, dimof(buf));
+            auto buf = TempToWstr(i.str.s, i.str.len);
+            size_t strLen = buf.size();
             // soft hyphens should not be displayed
             strLen -= str::RemoveChars(buf, L"\xad");
             textDraw->Draw(buf, strLen, ToGdipRectF(bbox), DrawInstrType::RtlString == i.type);
@@ -1486,7 +1489,7 @@ void DrawHtmlPage(Graphics* g, mui::ITextRender* textDraw, Vec<DrawInstr>* drawI
     }
 }
 
-static mui::TextRenderMethod gTextRenderMethod = mui::TextRenderMethodGdi;
+static mui::TextRenderMethod gTextRenderMethod = mui::TextRenderMethod::Gdi;
 // static mui::TextRenderMethod gTextRenderMethod = mui::TextRenderMethodGdiplus;
 
 mui::TextRenderMethod GetTextRenderMethod() {

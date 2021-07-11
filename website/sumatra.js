@@ -1,8 +1,9 @@
 // update after releasing a new version
-var gSumVer = "3.2";
+var gSumVer = "3.3";
 
 // used by download-prev* pages, update after releasing a new version
 var gPrevSumatraVersion = [
+  "3.2",
   "3.1.2",
   "3.1.1",
   "3.1",
@@ -46,9 +47,12 @@ var gPrevSumatraVersion = [
   "0.2"
 ];
 
-var dlPrefix = "/dl/";
-var dlPrefix2 = "/dl2/";
-var host = "https://www.sumatrapdfreader.org";
+//var dlPrefix = "/dl/";
+var dlPrefix = "https://kjkpub.nyc3.digitaloceanspaces.com/software/sumatrapdf/rel/";
+//var dlPrefix2 = "/dl2/";
+var dlPrefix2 = "https://kjkpubsf.sfo2.digitaloceanspaces.com/software/sumatrapdf/rel/";
+//var host = "https://www.sumatrapdfreader.org";
+var host = "";
 
 function a(href, txt) {
   return '<a href="' + href + '">' + txt + "</a>";
@@ -134,11 +138,16 @@ function dlAfterHtml64(s1, s2, s3, s4) {
   );
 }
 
+// ie 11 doesn't have String.startsWith
+function startsWith(s, prefix) {
+  return s.slice(0, prefix.length) === prefix;
+}
+
 // given /free-pdf-reader.html returns free-pdf-reader
 // special case for /docs/*.html => docs
 function getBaseUrl() {
   var loc = location.pathname; // '/free-pdf-reader.html etc.
-  if (loc.startsWith("/docs/") || loc.startsWith("docs/")) {
+  if (startsWith(loc, "/docs/") || startsWith(loc, "docs/")) {
     return "docs";
   }
   var url = loc.split("/");
@@ -165,6 +174,7 @@ var baseUrls = [
   ["download-free-pdf-viewer", "Download"],
   ["manual", "Manual"],
   ["docs", "Documentation"],
+  //["online", "Online"],
   ["backers", "Support SumatraPDF"],
   ["forum", "Discussion Forum"]
 ];
@@ -185,9 +195,10 @@ function navHtml() {
     if (currUrl == "docs") {
       url =
         "/docs/SumatraPDF-documentation.html";
-    }
-    if (currUrl == "forum") {
+    } else if (currUrl == "forum") {
       url = "https://forum.sumatrapdfreader.org";
+    } else if (currUrl == "online") {
+      url = "https://online.sumatrapdfreader.org/";
     }
     s +=
       '<a href="' +

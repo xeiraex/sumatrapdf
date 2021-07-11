@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 // using namespace Gdiplus;
@@ -113,7 +113,7 @@ struct StyleRule {
 
     float textIndent{0};
     Unit textIndentUnit = inherit;
-    AlignAttr textAlign = Align_NotFound;
+    AlignAttr textAlign = AlignAttr::NotFound;
 
     StyleRule() = default;
 
@@ -125,7 +125,7 @@ struct StyleRule {
 
 struct DrawStyle {
     mui::CachedFont* font{nullptr};
-    AlignAttr align{Align_NotFound};
+    AlignAttr align{AlignAttr::NotFound};
     bool dirRtl{false};
 };
 
@@ -165,7 +165,7 @@ struct HtmlFormatterArgs {
        used to allocate this text. */
     Allocator* textAllocator{nullptr};
 
-    mui::TextRenderMethod textRenderMethod = mui::TextRenderMethodGdiplus;
+    mui::TextRenderMethod textRenderMethod = mui::TextRenderMethod::Gdiplus;
 
     std::span<u8> htmlStr;
 
@@ -301,8 +301,6 @@ class HtmlFormatter {
     // number of pages generated so far, approximate. Only used
     // for detection of cover image duplicates in mobi formatting
     int pageCount{0};
-
-    WCHAR buf[512]{};
 
   public:
     explicit HtmlFormatter(HtmlFormatterArgs* args);

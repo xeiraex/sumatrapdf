@@ -587,9 +587,9 @@ fz_link *fz_load_links(fz_context *ctx, fz_page *page);
 	fz_page. This macro allocates such derived structures, and
 	initialises the base sections.
 */
-fz_page *fz_new_page_of_size(fz_context *ctx, int size);
-#define fz_new_derived_page(CTX,TYPE) \
-	((TYPE *)Memento_label(fz_new_page_of_size(CTX,sizeof(TYPE)),#TYPE))
+fz_page *fz_new_page_of_size(fz_context *ctx, int size, fz_document *doc);
+#define fz_new_derived_page(CTX,TYPE,DOC) \
+	((TYPE *)Memento_label(fz_new_page_of_size(CTX,sizeof(TYPE),DOC),#TYPE))
 
 /**
 	Determine the size of a page at 72 dpi.
@@ -656,6 +656,14 @@ void fz_run_page_widgets(fz_context *ctx, fz_page *page, fz_device *dev, fz_matr
 	Never throws exceptions.
 */
 fz_page *fz_keep_page(fz_context *ctx, fz_page *page);
+
+/**
+	Increment the reference count for the page. Returns the same
+	pointer. Must only be used when the alloc lock is already taken.
+
+	Never throws exceptions.
+*/
+fz_page *fz_keep_page_locked(fz_context *ctx, fz_page *page);
 
 /**
 	Decrements the reference count for the page. When the reference
@@ -762,6 +770,7 @@ fz_link *fz_create_link(fz_context *ctx, fz_page *page, fz_rect bbox, const char
 struct fz_page
 {
 	int refs;
+	fz_document *doc; /* reference to parent document */
 	int chapter; /* chapter number */
 	int number; /* page number in chapter */
 	int incomplete; /* incomplete from progressive loading; don't cache! */
@@ -819,6 +828,5 @@ struct fz_document_handler
 	fz_document_open_accel_fn *open_accel;
 	fz_document_open_accel_with_stream_fn *open_accel_with_stream;
 };
-
 
 #endif

@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 struct TextSelection;
@@ -25,6 +25,8 @@ class SumatraUIAutomationTextRange : public ITextRangeProvider {
     SumatraUIAutomationTextRange(SumatraUIAutomationDocumentProvider* document, TextSelection* range);
     // creates a copy of give range
     SumatraUIAutomationTextRange(const SumatraUIAutomationTextRange&);
+    SumatraUIAutomationTextRange& operator=(const SumatraUIAutomationTextRange&) = delete;
+
     ~SumatraUIAutomationTextRange();
 
     bool operator==(const SumatraUIAutomationTextRange&) const;

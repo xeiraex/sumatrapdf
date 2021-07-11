@@ -25,6 +25,12 @@ void pdf_update_object(fz_context *ctx, pdf_document *doc, int num, pdf_obj *obj
 */
 void pdf_update_stream(fz_context *ctx, pdf_document *doc, pdf_obj *ref, fz_buffer *buf, int compressed);
 
+/*
+	Return true if 'obj' is an indirect reference to an object that is held
+	by the "local" xref section.
+*/
+int pdf_is_local_object(fz_context *ctx, pdf_document *doc, pdf_obj *obj);
+
 pdf_obj *pdf_add_object(fz_context *ctx, pdf_document *doc, pdf_obj *obj);
 pdf_obj *pdf_add_object_drop(fz_context *ctx, pdf_document *doc, pdf_obj *obj);
 pdf_obj *pdf_add_stream(fz_context *ctx, pdf_document *doc, fz_buffer *buf, pdf_obj *obj, int compressed);
@@ -136,6 +142,7 @@ int pdf_xref_is_incremental(fz_context *ctx, pdf_document *doc, int num);
 void pdf_xref_store_unsaved_signature(fz_context *ctx, pdf_document *doc, pdf_obj *field, pdf_pkcs7_signer *signer);
 void pdf_xref_remove_unsaved_signature(fz_context *ctx, pdf_document *doc, pdf_obj *field);
 int pdf_xref_obj_is_unsaved_signature(pdf_document *doc, pdf_obj *obj);
+void pdf_xref_ensure_local_object(fz_context *ctx, pdf_document *doc, int num);
 
 void pdf_repair_xref(fz_context *ctx, pdf_document *doc);
 void pdf_repair_obj_stms(fz_context *ctx, pdf_document *doc);
@@ -202,5 +209,12 @@ int pdf_find_version_for_obj(fz_context *ctx, pdf_document *doc, pdf_obj *obj);
 */
 int pdf_validate_signature(fz_context *ctx, pdf_widget *widget);
 int pdf_was_pure_xfa(fz_context *ctx, pdf_document *doc);
+
+/* Local xrefs - designed for holding stuff that shouldn't be written
+ * back into the actual document, such as synthesized appearance
+ * streams. */
+pdf_xref *pdf_new_local_xref(fz_context *ctx, pdf_document *doc);
+
+void pdf_drop_local_xref(fz_context *ctx, pdf_xref *xref);
 
 #endif

@@ -86,22 +86,13 @@ func build(dir, config, platform string) {
 	slnPath := filepath.Join("vs2019", "SumatraPDF.sln")
 
 	p := fmt.Sprintf(`/p:Configuration=%s;Platform=%s`, config, platform)
-	runExeLoggedMust(msbuildPath, slnPath, `/t:test_util`, p, `/m`)
+	runExeLoggedMust(msbuildPath, slnPath, `/t:test_util:Rebuild`, p, `/m`)
 	runTestUtilMust(dir)
 
-	runExeLoggedMust(msbuildPath, slnPath, `/t:SumatraPDF;SumatraPDF-dll;PdfFilter;PdfPreview`, p, `/m`)
+	runExeLoggedMust(msbuildPath, slnPath, `/t:SumatraPDF:Rebuild;SumatraPDF-dll:Rebuild;PdfFilter:Rebuild;PdfPreview:Rebuild`, p, `/m`)
 	signFilesMust(dir)
 	createPdbZipMust(dir)
 	createPdbLzsaMust(dir)
-}
-
-func buildJustInstaller(dir, config, platform string) {
-	msbuildPath := detectMsbuildPath()
-	slnPath := filepath.Join("vs2019", "SumatraPDF.sln")
-
-	p := fmt.Sprintf(`/p:Configuration=%s;Platform=%s`, config, platform)
-	runExeLoggedMust(msbuildPath, slnPath, `/t:SumatraPDF-dll;PdfFilter;PdfPreview`, p, `/m`)
-	signFilesMust(dir)
 }
 
 func extractSumatraVersionMust() string {
@@ -129,8 +120,43 @@ func detectVersions() {
 	logf("sumatraVersion: '%s'\n", sumatraVersion)
 }
 
+// remove all files and directories under out/ except settings files
 func clean() {
-	os.RemoveAll("out")
+	entries, err := os.ReadDir("out")
+	if err != nil {
+		// assuming 'out' doesn't exist, which is fine
+		return
+	}
+	nSkipped := 0
+	nDirsDeleted := 0
+	nFilesDeleted := 0
+	for _, e := range entries {
+		path := filepath.Join("out", e.Name())
+		if !e.IsDir() {
+			os.Remove(path)
+			continue
+		}
+		entries2, err := os.ReadDir(path)
+		must(err)
+		for _, e2 := range entries2 {
+			name := e2.Name()
+			path2 := filepath.Join(path, name)
+			// delete everything except those files
+			excluded := (name == "sumatrapdfcache") || (name == "SumatraPDF-settings.txt")
+			if excluded {
+				nSkipped++
+				continue
+			}
+			if e2.IsDir() {
+				os.RemoveAll(path2)
+				nDirsDeleted++
+			} else {
+				os.Remove(path2)
+				nFilesDeleted++
+			}
+		}
+	}
+	fmt.Printf("clean: skipped %d files, deleted %d dirs and %d files\n", nSkipped, nDirsDeleted, nFilesDeleted)
 }
 
 func runTestUtilMust(dir string) {
@@ -147,7 +173,7 @@ func buildLzsa() {
 	clean()
 
 	msbuildPath := detectMsbuildPath()
-	runExeLoggedMust(msbuildPath, `vs2019\SumatraPDF.sln`, `/t:MakeLZSA`, `/p:Configuration=Release;Platform=Win32`, `/m`)
+	runExeLoggedMust(msbuildPath, `vs2019\SumatraPDF.sln`, `/t:MakeLZSA:Rebuild`, `/p:Configuration=Release;Platform=Win32`, `/m`)
 
 	path := filepath.Join("out", "rel32", "MakeLZSA.exe")
 	signMust(path)
@@ -165,14 +191,16 @@ func smokeBuild() {
 	u.PanicIf(!u.FileExists(lzsa), "file '%s' doesn't exist", lzsa)
 
 	msbuildPath := detectMsbuildPath()
-	runExeLoggedMust(msbuildPath, `vs2019\SumatraPDF.sln`, `/t:SumatraPDF-dll;test_util`, `/p:Configuration=Release;Platform=x64`, `/m`)
-	runTestUtilMust(filepath.Join("out", "rel64"))
+	runExeLoggedMust(msbuildPath, `vs2019\SumatraPDF.sln`, `/t:SumatraPDF-dll:Rebuild;test_util:Rebuild`, `/p:Configuration=Release;Platform=x64`, `/m`)
+	outDir := filepath.Join("out", "rel64")
+	runTestUtilMust(outDir)
 
 	{
 		cmd := exec.Command(lzsa, "SumatraPDF.pdb.lzsa", "libmupdf.pdb:libmupdf.pdb", "SumatraPDF-dll.pdb:SumatraPDF-dll.pdb")
-		cmd.Dir = filepath.Join("out", "rel64")
+		cmd.Dir = outDir
 		u.RunCmdLoggedMust(cmd)
 	}
+	signFilesMust(outDir)
 }
 
 func buildConfigPath() string {
@@ -326,7 +354,7 @@ func createManifestMust() {
 	}
 	dirs := []string{rel32Dir, rel64Dir}
 	// in daily build, there's no 32bit build
-	if !pathExists(rel32Dir) {
+	if !u.PathExists(rel32Dir) {
 		dirs = []string{rel64Dir}
 	}
 	for _, dir := range dirs {
@@ -339,7 +367,7 @@ func createManifestMust() {
 	}
 
 	s := strings.Join(lines, "\n")
-	u.CreateDirIfNotExistsMust(artifactsDir)
+	u.CreateDirMust(artifactsDir)
 	path := filepath.Join(artifactsDir, "manifest.txt")
 	u.WriteFileMust(path, []byte(s))
 }
@@ -370,6 +398,7 @@ var (
 func signFilesMust(dir string) {
 	if !shouldSignAndUpload() {
 		logf("Skipping signing in dir '%s'\n", dir)
+		return
 	}
 	if u.FileExists(filepath.Join(dir, "SumatraPDF.exe")) {
 		signMust(filepath.Join(dir, "SumatraPDF.exe"))
@@ -378,4 +407,11 @@ func signFilesMust(dir string) {
 	signMust(filepath.Join(dir, "PdfFilter.dll"))
 	signMust(filepath.Join(dir, "PdfPreview.dll"))
 	signMust(filepath.Join(dir, "SumatraPDF-dll.exe"))
+}
+
+func signFilesOptional(dir string) {
+	if !hasCertPwd() {
+		return
+	}
+	signFilesMust(dir)
 }

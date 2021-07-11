@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
 License: GPLv3 */
 
 /* Adding themes instructions:
@@ -334,7 +334,7 @@ Theme* GetCurrentTheme() {
     if (currentTheme == NULL || !str::Eq(currentTheme->name, gGlobalPrefs->themeName)) {
         currentTheme = GetThemeByName(gGlobalPrefs->themeName);
         if (currentTheme == NULL) {
-            str::ReplacePtr(&gGlobalPrefs->themeName, g_themeLight.name);
+            str::ReplaceWithCopy(&gGlobalPrefs->themeName, g_themeLight.name);
             currentTheme = &g_themeLight;
         }
         currentThemeIndex = GetThemeIndex(currentTheme);

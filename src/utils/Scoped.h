@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 // include BaseUtil.h instead of including directly
@@ -201,6 +201,10 @@ struct AutoFree {
         return res;
     }
 
+    [[nodiscard]] char* StealData() {
+        return this->Release();
+    }
+
     void TakeOwnershipOf(const char* s, size_t size = 0) {
         free(data);
         data = (char*)s;
@@ -268,12 +272,14 @@ struct AutoFreeWstr {
         data = (WCHAR*)newPtr;
     }
 
-    void SetCopy(const WCHAR* newPtr) {
-        str::Free(data);
-        data = nullptr;
-        if (newPtr) {
-            data = str::Dup(newPtr);
-        }
+    void SetCopy(const WCHAR* newVal) {
+        str::FreePtr(&data);
+        data = str::Dup(newVal);
+    }
+
+    void SetCopy(std::wstring_view newVal) {
+        str::FreePtr(&data);
+        data = str::Dup(newVal);
     }
 
     // for convenince, we calculate the size if wasn't provided

@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -762,14 +762,16 @@ void TabsOnCloseDoc(WindowInfo* win) {
         return;
     }
 
+    /*
     DisplayModel* dm = win->AsFixed();
     if (dm) {
         EngineBase* engine = dm->GetEngine();
         if (EngineHasUnsavedAnnotations(engine)) {
-            // TODO: warn about unsaved changed
-            logf("File has unsaved changed\n");
+            // TODO: warn about unsaved annotations
+            logf("File has unsaved annotations\n");
         }
     }
+    */
 
     int current = win->tabsCtrl->GetSelectedTabIndex();
     RemoveTab(win, current);

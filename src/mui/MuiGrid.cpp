@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -70,7 +70,8 @@ void Grid::RebuildCellDataIfNeeded() {
     }
 
     free(cells);
-    cells = AllocArray<Cell>(cols * rows);
+    size_t totalSize = (size_t)cols * (size_t)rows;
+    cells = AllocArray<Cell>(totalSize);
 
     // TODO: not sure if I want to disallow empty grids, but do for now
     CrashIf(0 == rows);

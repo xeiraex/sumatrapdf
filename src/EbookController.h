@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 struct DrawInstr;
@@ -63,7 +63,7 @@ struct EbookController : Controller {
     void ScrollToLink(PageDestination* dest) override;
     PageDestination* GetNamedDest(const WCHAR* name) override;
 
-    void GetDisplayState(DisplayState* ds) override;
+    void GetDisplayState(FileState* ds) override;
     void CreateThumbnail(Size size, const onBitmapRenderedCb&) override;
 
     bool GoToNextPage() override;

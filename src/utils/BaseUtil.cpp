@@ -1,7 +1,9 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
+
+Kind kindNone = "none";
 
 // if > 1 we won't crash when memory allocation fails
 std::atomic<int> gAllowAllocFailure = 0;
@@ -39,42 +41,28 @@ void* Allocator::Realloc(Allocator* a, void* mem, size_t size) {
     return a->Realloc(mem, size);
 }
 
-void* Allocator::MemDup(Allocator* a, const void* mem, size_t size, size_t padding) {
-    void* newMem = Alloc(a, size + padding);
+// extraBytes will be zero, useful e.g. for creating zero-terminated strings
+// by using extraBytes = sizeof(CHAR)
+void* Allocator::MemDup(Allocator* a, const void* mem, size_t size, size_t extraBytes) {
+    if (!mem) {
+        return nullptr;
+    }
+    void* newMem = AllocZero(a, size + extraBytes);
     if (newMem) {
         memcpy(newMem, mem, size);
     }
     return newMem;
 }
 
-char* Allocator::StrDup(Allocator* a, const char* s) {
-    if (!s) {
-        return nullptr;
-    }
-    size_t n = str::Len(s);
-    return (char*)Allocator::MemDup(a, s, n + 1);
-}
+// -------------------------------------
 
-// allocates a copy of the source string inside the allocator.
-// it's only safe in PoolAllocator because allocated data
-// never moves in memory
-std::string_view Allocator::AllocString(Allocator* a, std::string_view sv) {
-    size_t n = sv.size();
-    char* dst = (char*)Allocator::Alloc(a, n + 1);
-    const char* src = sv.data();
-    memcpy(dst, (const void*)src, n);
-    dst[n] = 0; // we don't assume sv.data() is 0-terminated
-    return std::string_view(dst, n);
-}
-
-#if OS_WIN
-WCHAR* Allocator::StrDup(Allocator* a, const WCHAR* s) {
-    if (!s) {
-        return nullptr;
-    }
-    size_t n = (str::Len(s) + 1) * sizeof(WCHAR);
-    return (WCHAR*)Allocator::MemDup(a, s, n);
-}
+// using the same alignment as windows, to be safe
+// TODO: could use the same alignment everywhere but would have to
+// align start of the Block, couldn't just start at malloc() address
+#if IS_32BIT
+constexpr size_t kPoolAllocatorAlign = 8;
+#else
+constexpr size_t kPoolAllocatorAlign = 16;
 #endif
 
 void PoolAllocator::Free(const void*) {
@@ -93,33 +81,61 @@ void PoolAllocator::FreeAll() {
     nAllocs = 0;
 }
 
-// optimization: frees all but first block
-// allows for more efficient re-use of PoolAllocator
-// with more effort we could preserve all blocks (not sure if worth it)
-void PoolAllocator::Reset() {
-    FreeAll();
+static constexpr size_t BlockHeaderSize() {
+    return RoundUp(sizeof(PoolAllocator::Block), kPoolAllocatorAlign);
+}
 
-    // TODO: optimize by not freeing the first block, to speed up re-use
-#if 0
-    if (!firstBlock) {
+// for easier debugging, poison the freed data with 0xdd
+// that way if the code tries to used the freed memory,
+// it's more likely to crash
+static void PoisonData(PoolAllocator::Block* curr) {
+    char* d;
+    size_t hdrSize = BlockHeaderSize();
+    while (curr) {
+        // optimization: don't touch memory if there were not allocations
+        if (curr->nAllocs > 0) {
+            d = (char*)curr + hdrSize;
+            // the buffer is big so optimize to only poison the data
+            // allocated in this block
+            CrashIf(d > curr->freeSpace);
+            size_t n = (curr->freeSpace - d);
+            memset(d, 0xdd, n);
+        }
+        curr = curr->next;
+    }
+}
+
+static void ResetBlock(PoolAllocator::Block* block) {
+    size_t hdrSize = BlockHeaderSize();
+    char* start = (char*)block;
+    block->nAllocs = 0;
+    block->freeSpace = start + hdrSize;
+    block->end = start + block->dataSize;
+    block->next = nullptr;
+    CrashIf(RoundUp(block->freeSpace, kPoolAllocatorAlign) != block->freeSpace);
+}
+
+void PoolAllocator::Reset(bool poisonFreedMemory) {
+    // free all but first block to
+    // allows for more efficient re-use of PoolAllocator
+    // with more effort we could preserve all blocks (not sure if worth it)
+    Block* first = firstBlock;
+    if (!first) {
         return;
     }
-    Block* first = firstBlock;
-    firstBlock = first->next;
+    if (poisonFreedMemory) {
+        PoisonData(firstBlock);
+    }
+    firstBlock = firstBlock->next;
     FreeAll();
-
+    ResetBlock(first);
     firstBlock = first;
-    first->next = nullptr;
-    first->nAllocs = 0;
-    // TODO: properly reset first
-#endif
 }
 
 PoolAllocator::~PoolAllocator() {
     FreeAll();
 }
 
-// Allocator methods
 void* PoolAllocator::Realloc(void*, size_t) {
     // TODO: we can't do that because we don't know the original
     // size of memory piece pointed by mem. We could remember it
@@ -128,37 +144,34 @@ void* PoolAllocator::Realloc(void*, size_t) {
     return nullptr;
 }
 
-static bool BlockHasSpaceFor(PoolAllocator::Block* block, int size, int allocAlign) {
-    if (!block) {
-        return false;
-    }
-    char* d = RoundUp(block->curr, allocAlign);
-    // data + i32 index of allocation
-    d += (size + sizeof(i32));
-    if (d > block->end) {
-        return false;
-    }
-    return true;
-}
-
+// we allocate the value at the beginning of current block
+// and we store a pointer to the value at the end of current block
+// that way we can find allocations
 void* PoolAllocator::Alloc(size_t size) {
-    if (!BlockHasSpaceFor(currBlock, (int)size, allocAlign)) {
-        int freeSpaceSize = (int)size + sizeof(i32); // + space for index
-        int hdrSize = RoundUp((int)sizeof(PoolAllocator::Block), allocAlign);
-        int blockSize = hdrSize + freeSpaceSize;
-        if (blockSize < minBlockSize) {
-            blockSize = minBlockSize;
-            freeSpaceSize = minBlockSize - hdrSize;
-        }
-        // TODO: zero with calloc()? slower but safer
-        auto block = (Block*)malloc(blockSize);
-        char* start = (char*)block;
+    // need rounded size + space for index at the end
+    bool hasSpace = false;
+    size_t sizeRounded = RoundUp(size, kPoolAllocatorAlign);
+    size_t cbNeeded = sizeRounded + sizeof(i32);
+    if (currBlock) {
+        CrashIf(currBlock->freeSpace > currBlock->end);
+        size_t cbAvail = (currBlock->end - currBlock->freeSpace);
+        hasSpace = cbAvail >= cbNeeded;
+    }
 
-        block->nAllocs = 0;
-        block->curr = start + hdrSize;
-        block->dataSize = freeSpaceSize;
-        block->end = start + block->dataSize;
-        block->next = nullptr;
+    if (!hasSpace) {
+        size_t hdrSize = BlockHeaderSize();
+        size_t dataSize = cbNeeded;
+        size_t allocSize = hdrSize + cbNeeded;
+        if (allocSize < minBlockSize) {
+            allocSize = minBlockSize;
+            dataSize = minBlockSize - hdrSize;
+        }
+        auto block = (Block*)AllocZero(nullptr, allocSize);
+        if (!block) {
+            return nullptr;
+        }
+        block->dataSize = dataSize;
+        ResetBlock(block);
         if (!firstBlock) {
             firstBlock = block;
         }
@@ -167,11 +180,12 @@ void* PoolAllocator::Alloc(size_t size) {
         }
         currBlock = block;
     }
-    char* res = RoundUp(currBlock->curr, allocAlign);
-    currBlock->curr = res + size;
+    char* res = currBlock->freeSpace;
+    currBlock->freeSpace = res + sizeRounded;
+    //TODO: figure out why this hits
+    //CrashIf(RoundUp(currBlock->freeSpace, kPoolAllocatorAlign) != currBlock->freeSpace);
 
     char* blockStart = (char*)currBlock;
-
     i32 offset = (i32)(res - blockStart);
     i32* index = (i32*)currBlock->end;
     index -= 1;
@@ -188,28 +202,22 @@ void* PoolAllocator::At(int i) {
         return nullptr;
     }
     auto curr = firstBlock;
-    while (curr && i >= curr->nAllocs) {
-        i -= curr->nAllocs;
+    while (curr && (size_t)i >= curr->nAllocs) {
+        i -= (int)curr->nAllocs;
         curr = curr->next;
     }
     CrashIf(!curr);
     if (!curr) {
         return nullptr;
     }
-    CrashIf(i >= curr->nAllocs);
+    CrashIf((size_t)i >= curr->nAllocs);
     i32* index = (i32*)curr->end;
     // elements are in reverse
-    int idx = curr->nAllocs - i - 1;
+    size_t idx = curr->nAllocs - i - 1;
     i32 offset = index[idx];
     char* d = (char*)curr + offset;
     return (void*)d;
 }
-
-#if !OS_WIN
-void ZeroMemory(void* p, size_t len) {
-    memset(p, 0, len);
-}
-#endif
 
 // This exits so that I can add temporary instrumentation
 // to catch allocations of a given size and it won't cause
@@ -218,12 +226,16 @@ void* AllocZero(size_t count, size_t size) {
     return calloc(count, size);
 }
 
-void* memdup(const void* data, size_t len) {
-    void* dup = malloc(len);
-    if (!dup) {
+// extraBytes will be filled with 0. Useful for copying zero-terminated strings
+void* memdup(const void* data, size_t len, size_t extraBytes) {
+    // to simplify callers, if data is nullptr, ignore the sizes
+    if (!data) {
         return nullptr;
     }
-    memcpy(dup, data, len);
+    void* dup = AllocZero(len + extraBytes, 1);
+    if (dup) {
+        memcpy(dup, data, len);
+    }
     return dup;
 }
 
@@ -231,7 +243,7 @@ bool memeq(const void* s1, const void* s2, size_t len) {
     return 0 == memcmp(s1, s2, len);
 }
 
-size_t RoundUp(size_t n, size_t rounding) {
+constexpr size_t RoundUp(size_t n, size_t rounding) {
     return ((n + rounding - 1) / rounding) * rounding;
 }
 
@@ -363,13 +375,13 @@ static bool allocateIndexIfNeeded(VecStr& v) {
         return true;
     }
 
-    // for structures we want aligned allocation. 8 should be good enough for everything
-    v.allocator.allocAlign = 8;
     VecStrIndex* idx = v.allocator.AllocStruct<VecStrIndex>();
 
-    if (!idx && (gAllowAllocFailure.load() > 0)) {
+    if (!idx) {
+        CrashAlwaysIf(gAllowAllocFailure.load() == 0);
         return false;
     }
+
     idx->next = nullptr;
     idx->nStrings = 0;
 
@@ -395,8 +407,7 @@ bool VecStr::Append(std::string_view sv) {
     if (sv.size() > maxLen) {
         return false;
     }
-    allocator.allocAlign = 1; // no need to align allocations for string
-    std::string_view res = Allocator::AllocString(&allocator, sv);
+    std::string_view res = str::Dup(&allocator, sv);
 
     int n = currIndex->nStrings;
     currIndex->offsets[n] = (char*)res.data();

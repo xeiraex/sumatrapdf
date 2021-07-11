@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "BaseUtil.h"
@@ -122,7 +122,7 @@ static const char* ParseNumber(ParseArgs& args, const char* data) {
         return nullptr;
     }
 
-    char* number = str::DupN(start, data - start);
+    char* number = str::Dup(start, data - start);
     const char* path = args.path.Get();
     args.canceled = !args.visitor->Visit(path, number, Type::Number);
     free(number);

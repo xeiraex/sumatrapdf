@@ -1,39 +1,31 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 namespace strconv {
 
-size_t Utf8ToWcharBuf(const char* s, size_t sLen, WCHAR* bufOut, size_t cchBufOutSize);
-size_t WcharToUtf8Buf(const WCHAR* s, char* bufOut, size_t cbBufOutSize);
-std::string_view ToMultiByte(const char* src, uint CodePageSrc, uint CodePageDest);
-WCHAR* ToWideChar(const char* src, uint CodePage, int cbSrcLen = -1);
+std::wstring_view Utf8ToWstrV(const char* s, size_t cb = (size_t)-1, Allocator* a = nullptr);
+std::wstring_view Utf8ToWstrV(std::string_view sv, Allocator* a = nullptr);
+WCHAR* Utf8ToWstr(const char* s, size_t cb = (size_t)-1, Allocator* a = nullptr);
+WCHAR* Utf8ToWstr(std::string_view sv);
 
-std::string_view UnknownToUtf8(const std::string_view&);
+std::string_view WstrToCodePageV(uint codePage, const WCHAR* s, size_t cch = (size_t)-1, Allocator* a = nullptr);
+std::string_view WstrToUtf8V(const WCHAR* s, size_t cch = (size_t)-1, Allocator* a = nullptr);
+std::string_view WstrToUtf8V(std::wstring_view, Allocator* a = nullptr);
+char* WstrToCodePage(uint codePage, const WCHAR* s, size_t cch = (size_t)-1, Allocator* a = nullptr);
+char* WstrToUtf8(const WCHAR* s, size_t cch = (size_t)-1, Allocator* a = nullptr);
+char* WstrToUtf8(std::wstring_view sv, Allocator* a = nullptr);
+
+std::string_view ToMultiByteV(const char* src, uint codePageSrc, uint codePageDest);
+WCHAR* ToWideChar(const char* src, uint codePage, int cbSrc = -1);
+
+std::string_view UnknownToUtf8V(const std::string_view&);
 
 WCHAR* FromCodePage(const char* src, uint cp);
 
-WCHAR* Utf8ToWstr(std::string_view sv);
+std::string_view WstrToAnsiV(const WCHAR*);
 
-std::string_view WstrToUtf8(const WCHAR* src, size_t cchSrcLen = -1);
-std::string_view WstrToUtf8(std::wstring_view);
-
-std::string_view WstrToCodePage(const WCHAR* txt, uint codePage, int cchTxtLen = -1);
-std::string_view WstrToAnsi(const WCHAR*);
-
-WCHAR* FromAnsi(const char* src, size_t cbSrcLen = (size_t)-1);
-size_t ToCodePageBuf(char* buf, int cbBufSize, const WCHAR* s, uint cp);
-size_t FromCodePageBuf(WCHAR* buf, int cchBufSize, const char* s, uint cp);
-
-struct StackWstrToUtf8 {
-    char buf[128];
-    char* overflow = nullptr;
-
-    StackWstrToUtf8(std::wstring_view);
-    StackWstrToUtf8(const WCHAR*);
-    StackWstrToUtf8& operator=(const StackWstrToUtf8&) = delete;
-    ~StackWstrToUtf8();
-    char* Get() const;
-    operator char*() const;
-};
+WCHAR* FromAnsi(const char* src, size_t cbSrc = (size_t)-1);
+size_t ToCodePageBuf(char* buf, int cbBuf, const WCHAR* s, uint cp);
+size_t FromCodePageBuf(WCHAR* buf, int cchBuf, const char* s, uint cp);
 
 } // namespace strconv

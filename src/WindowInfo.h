@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 struct DoubleBuffer;
@@ -37,8 +37,8 @@ enum class MouseAction {
 };
 // clang-format on
 
-extern NotificationGroupId NG_CURSOR_POS_HELPER;
-extern NotificationGroupId NG_RESPONSE_TO_ACTION;
+extern Kind NG_CURSOR_POS_HELPER;
+extern Kind NG_RESPONSE_TO_ACTION;
 
 // clang-format off
 enum PresentationMode {
@@ -104,10 +104,10 @@ struct WindowInfo {
     HWND hwndPageBox{nullptr};
     HWND hwndPageBg{nullptr};
     HWND hwndPageTotal{nullptr};
+    HWND hwndTbInfoText{nullptr};
 
     // state related to table of contents (PDF bookmarks etc.)
     HWND hwndTocBox{nullptr};
-    DropDownCtrl* altBookmarks{nullptr};
 
     LabelWithCloseWnd* tocLabelWithClose{nullptr};
     TreeCtrl* tocTreeCtrl{nullptr};
@@ -124,7 +124,7 @@ struct WindowInfo {
     HWND hwndFavBox{nullptr};
     LabelWithCloseWnd* favLabelWithClose{nullptr};
     TreeCtrl* favTreeCtrl{nullptr};
-    Vec<DisplayState*> expandedFavorites;
+    Vec<FileState*> expandedFavorites;
 
     // vertical splitter for resizing left side panel
     SplitterCtrl* sidebarSplitter{nullptr};
@@ -241,8 +241,10 @@ struct WindowInfo {
 
     void ShowToolTip(const WCHAR* text, Rect& rc, bool multiline = false);
     void HideToolTip();
-    NotificationWnd* ShowNotification(const WCHAR* msg, int options = NOS_WITH_TIMEOUT,
-                                      NotificationGroupId groupId = NG_RESPONSE_TO_ACTION);
+    NotificationWnd* ShowNotification(const WCHAR* msg, NotificationOptions options = NotificationOptions::WithTimeout,
+                                      Kind groupId = NG_RESPONSE_TO_ACTION);
+    NotificationWnd* ShowNotification(std::string_view, NotificationOptions options = NotificationOptions::WithTimeout,
+                                      Kind groupId = NG_RESPONSE_TO_ACTION);
 
     bool CreateUIAProvider();
 };
@@ -268,3 +270,9 @@ void ClearFindBox(WindowInfo*);
 void CreateMovePatternLazy(WindowInfo*);
 void ClearMouseState(WindowInfo*);
 bool IsRightDragging(WindowInfo*);
+WindowInfo* FindWindowInfoByTabInfo(TabInfo*);
+WindowInfo* FindWindowInfoByHwnd(HWND);
+bool WindowInfoStillValid(WindowInfo*);
+WindowInfo* FindWindowInfoByController(Controller*);
+
+extern Vec<WindowInfo*> gWindows;

@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -44,12 +44,15 @@
 #include "Commands.h"
 #include "Caption.h"
 #include "Selection.h"
+#include "Flags.h"
 #include "StressTesting.h"
 #include "Translations.h"
 #include "uia/Provider.h"
 
-NotificationGroupId NG_CURSOR_POS_HELPER = "cursorPosHelper";
-NotificationGroupId NG_RESPONSE_TO_ACTION = "responseToAction";
+Vec<WindowInfo*> gWindows;
+
+Kind NG_CURSOR_POS_HELPER = "cursorPosHelper";
+Kind NG_RESPONSE_TO_ACTION = "responseToAction";
 
 WindowInfo::WindowInfo(HWND hwnd) {
     hwndFrame = hwnd;
@@ -73,7 +76,7 @@ WindowInfo::~WindowInfo() {
     FinishStressTest(this);
 
     CrashIf(tabs.size() > 0);
-    CrashIf(ctrl);
+    // CrashIf(ctrl); // TODO: seen in crash report
     CrashIf(linkOnLastButtonDown);
     CrashIf(annotationOnLastButtonDown);
 
@@ -104,7 +107,6 @@ WindowInfo::~WindowInfo() {
 
     delete frameRateWnd;
     delete infotip;
-    delete altBookmarks;
     delete tocTreeCtrl;
     if (favTreeCtrl) {
         delete favTreeCtrl->treeModel;
@@ -113,8 +115,8 @@ WindowInfo::~WindowInfo() {
 
     delete sidebarSplitter;
     delete favSplitter;
-    free(tocLabelWithClose);
-    free(favLabelWithClose);
+    delete tocLabelWithClose;
+    delete favLabelWithClose;
 }
 
 void ClearMouseState(WindowInfo* win) {
@@ -214,15 +216,32 @@ void WindowInfo::ChangePresentationMode(PresentationMode mode) {
     RedrawAll();
 }
 
+static HWND FindModalOwnedBy(HWND hwndParent) {
+    HWND hwnd = nullptr;
+    while (true) {
+        hwnd = FindWindowExW(HWND_DESKTOP, hwnd, nullptr, nullptr);
+        if (hwnd == nullptr) {
+            break;
+        }
+        bool isDlg = (GetWindowStyle(hwnd) & WS_DLGFRAME) != 0;
+        if (!isDlg) {
+            continue;
+        }
+        if (GetWindow(hwnd, GW_OWNER) != hwndParent) {
+            continue;
+        }
+        return hwnd;
+    }
+    return nullptr;
+}
+
 void WindowInfo::Focus() {
     win::ToForeground(hwndFrame);
     // set focus to an owned modal dialog if there is one
-    HWND hwnd = nullptr;
-    while ((hwnd = FindWindowEx(HWND_DESKTOP, hwnd, nullptr, nullptr)) != nullptr) {
-        if (GetWindow(hwnd, GW_OWNER) == hwndFrame && (GetWindowStyle(hwnd) & WS_DLGFRAME)) {
-            SetFocus(hwnd);
-            return;
-        }
+    HWND hwnd = FindModalOwnedBy(hwndFrame);
+    if (hwnd != nullptr) {
+        SetFocus(hwnd);
+        return;
     }
     SetFocus(hwndFrame);
 }
@@ -250,9 +269,9 @@ void WindowInfo::HideToolTip() {
     infotip->Hide();
 }
 
-NotificationWnd* WindowInfo::ShowNotification(const WCHAR* msg, int options, NotificationGroupId groupId) {
-    int timeoutMS = (options & NOS_PERSIST) ? 0 : 3000;
-    bool highlight = (options & NOS_HIGHLIGHT);
+NotificationWnd* WindowInfo::ShowNotification(const WCHAR* msg, NotificationOptions opts, Kind groupId) {
+    int timeoutMS = ((uint)opts & (uint)NotificationOptions::Persist) ? 0 : 3000;
+    bool highlight = ((uint)opts & (uint)NotificationOptions::Highlight);
 
     NotificationWnd* wnd = new NotificationWnd(hwndCanvas, timeoutMS);
     wnd->highlight = highlight;
@@ -263,6 +282,11 @@ NotificationWnd* WindowInfo::ShowNotification(const WCHAR* msg, int options, Not
     wnd->Create(msg, nullptr);
     notifications->Add(wnd, groupId);
     return wnd;
+}
+
+NotificationWnd* WindowInfo::ShowNotification(std::string_view sv, NotificationOptions opts, Kind groupId) {
+    auto msg = TempToWstr(sv);
+    return this->ShowNotification(msg.Get(), opts, groupId);
 }
 
 bool WindowInfo::CreateUIAProvider() {
@@ -337,12 +361,9 @@ void LinkHandler::GotoLink(PageDestination* dest) {
         }
         // LaunchFile only opens files inside SumatraPDF
         // (except for allowed perceived file types)
-        // strip "file://" at the start of the path. It might be added by mupdf
-        WCHAR* tmpPath = path;
-        if (str::StartsWithI(tmpPath, L"file://")) {
-            tmpPath += 7;
-        }
+        WCHAR* tmpPath = CleanupFileURL(path);
         LaunchFile(tmpPath, dest);
+        str::Free(tmpPath);
         return;
     }
 
@@ -461,7 +482,7 @@ void LinkHandler::LaunchFile(const WCHAR* path, PageDestination* link) {
         bool ok = OpenFileExternally(fullPath);
         if (!ok) {
             AutoFreeWstr msg(str::Format(_TR("Error loading %s"), fullPath.Get()));
-            owner->ShowNotification(msg, NOS_HIGHLIGHT);
+            owner->ShowNotification(msg, NotificationOptions::Highlight);
         }
         return;
     }
@@ -629,4 +650,81 @@ bool IsRightDragging(WindowInfo* win) {
         return false;
     }
     return win->dragRightClick;
+}
+
+bool WindowInfoStillValid(WindowInfo* win) {
+    return gWindows.Contains(win);
+}
+
+static bool IsWindowInfoHwnd(WindowInfo* win, HWND hwnd, HWND parent) {
+    if (hwnd == win->hwndFrame) {
+        return true;
+    }
+    if (!parent) {
+        return false;
+    }
+    // canvas, toolbar, rebar, tocbox, splitters
+    if (parent == win->hwndFrame) {
+        return true;
+    }
+    // infotips, message windows
+
+    if (parent == win->hwndCanvas) {
+        return true;
+    }
+    // page and find labels and boxes
+    if (parent == win->hwndToolbar) {
+        return true;
+    }
+    // ToC tree, sidebar title and close button
+    if (parent == win->hwndTocBox) {
+        return true;
+    }
+    // Favorites tree, title, and close button
+    if (parent == win->hwndFavBox) {
+        return true;
+    }
+    // tab bar
+    if (parent == win->tabsCtrl->hwnd) {
+        return true;
+    }
+    // caption buttons, tab bar
+    if (parent == win->hwndCaption) {
+        return true;
+    }
+    return false;
+}
+
+WindowInfo* FindWindowInfoByHwnd(HWND hwnd) {
+    HWND parent = GetParent(hwnd);
+    for (WindowInfo* win : gWindows) {
+        if (IsWindowInfoHwnd(win, hwnd, parent)) {
+            return win;
+        }
+    }
+    return nullptr;
+}
+
+// Find WindowInfo using TabInfo. Diffrent than TabInfo->win in that
+// it validates that TabInfo is still valid
+WindowInfo* FindWindowInfoByTabInfo(TabInfo* tabToFind) {
+    for (WindowInfo* win : gWindows) {
+        for (TabInfo* tab : win->tabs) {
+            if (tab == tabToFind) {
+                return win;
+            }
+        }
+    }
+    return nullptr;
+}
+
+WindowInfo* FindWindowInfoByController(Controller* ctrl) {
+    for (auto& win : gWindows) {
+        for (auto& tab : win->tabs) {
+            if (tab->ctrl == ctrl) {
+                return win;
+            }
+        }
+    }
+    return nullptr;
 }

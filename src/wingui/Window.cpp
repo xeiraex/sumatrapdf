@@ -1,6 +1,6 @@
 
 
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -44,6 +44,10 @@ struct HwndMsgHandler {
 };
 
 VecSegmented<HwndMsgHandler> gHwndMsgHandlers;
+
+void WindowCleanup() {
+    gHwndMsgHandlers.allocator.FreeAll();
+}
 
 static void ClearHwndMsgHandler(HwndMsgHandler* h) {
     CrashIf(!h);
@@ -421,6 +425,9 @@ static LRESULT CALLBACK wndProcCustom(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
 
     if (w->isDialog) {
+        // TODO: should handle more messages as per
+        // https://stackoverflow.com/questions/35688400/set-full-focus-on-a-button-setfocus-is-not-enough
+        // and https://docs.microsoft.com/en-us/windows/win32/dlgbox/dlgbox-programming-considerations
         if (WM_ACTIVATE == msg) {
             if (wp == 0) {
                 // becoming inactive
@@ -717,7 +724,7 @@ HICON WindowBase::GetIcon() const {
 }
 
 void WindowBase::SetText(const WCHAR* s) {
-    AutoFree str = strconv::WstrToUtf8(s);
+    auto str = TempToUtf8(s);
     SetText(str.AsView());
 }
 
@@ -810,6 +817,7 @@ Window::Window() {
     kind = kindWindow;
     dwExStyle = 0;
     dwStyle = WS_OVERLAPPEDWINDOW;
+    // TODO: at this point parent cannot be set yet
     if (parent == nullptr) {
         dwStyle |= WS_CLIPCHILDREN;
     } else {
@@ -840,7 +848,7 @@ bool Window::Create() {
     if (initialSize.dy > 0) {
         dy = initialSize.dy;
     }
-    AutoFreeWstr title = strconv::Utf8ToWstr(this->text.AsView());
+    auto title = TempToWstr(this->text.AsView());
     HINSTANCE hinst = GetInstance();
     hwnd = CreateWindowExW(dwExStyle, winClass, title, dwStyle, x, y, dx, dy, parent, nullptr, hinst, (void*)this);
     CrashIf(!hwnd);
@@ -944,6 +952,42 @@ int RunMessageLoop(HACCEL accelTable, HWND hwndDialog) {
         DispatchMessage(&msg);
     }
     return (int)msg.wParam;
+}
+
+// TODO: support accelerator table?
+// TODO: a better way to stop the loop e.g. via shared
+// atomic int to signal termination and sending WM_IDLE
+// to trigger processing of the loop
+void RunModalWindow(HWND hwndDialog, HWND hwndParent) {
+    if (hwndParent != NULL) {
+        EnableWindow(hwndParent, FALSE);
+    }
+
+    MSG msg;
+    bool isFinished{false};
+    while (!isFinished) {
+        BOOL ok = WaitMessage();
+        if (!ok) {
+            DWORD err = GetLastError();
+            LogLastError(err);
+            isFinished = true;
+            continue;
+        }
+        while (!isFinished && PeekMessage(&msg, 0, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                isFinished = true;
+                break;
+            }
+            if (!IsDialogMessage(hwndDialog, &msg)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+        }
+    }
+
+    if (hwndParent != NULL) {
+        EnableWindow(hwndParent, TRUE);
+    }
 }
 
 // sets initial position of w within hwnd. Assumes w->initialSize is set.

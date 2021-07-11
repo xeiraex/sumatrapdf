@@ -1,11 +1,11 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
-enum TextRenderMethod {
-    TextRenderMethodGdiplus,      // uses MeasureTextAccurate, which is slower than MeasureTextQuick
-    TextRenderMethodGdiplusQuick, // uses MeasureTextQuick
-    TextRenderMethodGdi,
-    TextRenderMethodHdc,
+enum class TextRenderMethod {
+    Gdiplus,      // uses MeasureTextAccurate, which is slower than MeasureTextQuick
+    GdiplusQuick, // uses MeasureTextQuick
+    Gdi,
+    Hdc,
     // TODO: implement TextRenderDirectDraw
     // TextRenderDirectDraw
 };
@@ -50,7 +50,6 @@ class TextRenderGdi : public ITextRender {
     Gdiplus::Graphics* gfx = nullptr;
     Gdiplus::Color textColor;
     Gdiplus::Color textBgColor;
-    WCHAR txtConvBuf[512] = {0};
 
     HDC memHdc = nullptr;
     HGDIOBJ memHdcPrevFont = nullptr;

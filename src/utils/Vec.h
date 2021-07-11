@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 // note: include BaseUtil.h instead of including directly
@@ -28,10 +28,15 @@ class Vec {
 
   protected:
     bool EnsureCap(size_t needed) {
+        // this is frequent, fast path that should be inlined
         if (cap >= needed) {
             return true;
         }
+        // slow path
+        return EnsureCapSlow(needed);
+    }
 
+    bool EnsureCapSlow(size_t needed) {
         size_t newCap = cap * 2;
         if (needed > newCap) {
             newCap = needed;
@@ -371,7 +376,6 @@ inline void DeleteVecMembers(Vec<T>& v) {
     v.Reset();
 }
 
-#if OS_WIN
 // WStrVec owns the strings in the list
 class WStrVec : public Vec<WCHAR*> {
   public:
@@ -453,7 +457,7 @@ class WStrVec : public Vec<WCHAR*> {
 
         while ((next = str::Find(s, separator)) != nullptr) {
             if (!collapse || next > s) {
-                Append(str::DupN(s, next - s));
+                Append(str::Dup(s, next - s));
             }
             s = next + str::Len(separator);
         }
@@ -480,9 +484,7 @@ class WStrVec : public Vec<WCHAR*> {
         return wcscmp(*(const WCHAR**)a, *(const WCHAR**)b);
     }
 };
-#endif
 
-#if OS_WIN
 // WStrList is a subset of WStrVec that's optimized for appending and searching
 // WStrList owns the strings it contains and frees them at destruction
 class WStrList {
@@ -567,7 +569,6 @@ class WStrList {
         return -1 != Find(str);
     }
 };
-#endif
 
 // TODO: could increase kVecStrIndexSize when expanding array
 constexpr int kVecStrIndexSize = 128;

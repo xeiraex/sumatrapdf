@@ -1,5 +1,5 @@
 
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -335,6 +335,17 @@ int TocItem::ChildCount() {
 }
 
 TreeItem* TocItem::ChildAt(int n) {
+    if (n == 0) {
+        currChild = child;
+        currChildNo = 0;
+        return child;
+    }
+    // speed up sequential iteration over children
+    if (currChild != nullptr && n == currChildNo + 1) {
+        currChild = currChild->next;
+        ++currChildNo;
+        return currChild;
+    }
     auto node = child;
     while (n > 0) {
         n--;
@@ -541,4 +552,32 @@ PointF EngineBase::Transform(PointF pt, int pageNo, float zoom, int rotation, bo
     RectF rc = RectF(pt, SizeF());
     RectF rect = Transform(rc, pageNo, zoom, rotation, inverse);
     return rect.TL();
+}
+
+// skip file:// and maybe file:/// from s. It might be added by mupdf.
+// do not free the result
+static const WCHAR* SkipFileProtocol(const WCHAR* s) {
+    if (!str::StartsWithI(s, L"file://")) {
+        return s;
+    }
+    s += 7;
+    if (s[0] == L'/') {
+        s += 1;
+    }
+    return s;
+}
+
+// s could be in format "file://path.pdf#page=1"
+// We only want the "path.pdf"
+// caller must free
+// TODO: could also parse page=1 and return it so that
+// we can go to the right place
+WCHAR* CleanupFileURL(const WCHAR* s) {
+    s = SkipFileProtocol(s);
+    WCHAR* s2 = str::Dup(s);
+    WCHAR* s3 = str::FindChar(s2, L'#');
+    if (s3) {
+        *s3 = 0;
+    }
+    return s2;
 }

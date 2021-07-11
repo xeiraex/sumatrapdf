@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -84,7 +84,7 @@ static void PoolAllocatorStringsTest(PoolAllocator& a, int nRounds) {
         for (int j = 0; j < nStrings; j++) {
             const char* s = strings[j];
             std::string_view sv = s;
-            std::string_view got = Allocator::AllocString(&a, sv);
+            std::string_view got = str::Dup(&a, sv);
             utassert(str::Eq(sv, got.data()));
         }
     }
@@ -92,8 +92,7 @@ static void PoolAllocatorStringsTest(PoolAllocator& a, int nRounds) {
     int nTotal = nStrings * nRounds;
     int nString = 0;
     for (int i = 0; i < nTotal; i++) {
-        const char* exp = strings[nString];
-        nString = (nString + 1) % nStrings;
+        const char* exp = strings[i % nStrings];
 
         void* d = a.At(i);
         char* got = (char*)d;
@@ -103,8 +102,6 @@ static void PoolAllocatorStringsTest(PoolAllocator& a, int nRounds) {
 
 static void PoolAllocatorTest() {
     PoolAllocator a;
-    PoolAllocatorStringsTest(a, 2048);
-    a.allocAlign = 1;
     PoolAllocatorStringsTest(a, 2048);
 }
 

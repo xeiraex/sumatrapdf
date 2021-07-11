@@ -86,6 +86,16 @@ public class PDFAnnotation
 	public static final int IS_TOGGLE_NO_VIEW = 1 << (9-1);
 	public static final int IS_LOCKED_CONTENTS = 1 << (10-1);
 
+	/* Languages, keep in sync with FZ_LANG_* */
+	public static final int LANGUAGE_UNSET = 0;
+	public static final int LANGUAGE_ur = 507;
+	public static final int LANGUAGE_urd = 3423;
+	public static final int LANGUAGE_ko = 416;
+	public static final int LANGUAGE_ja = 37;
+	public static final int LANGUAGE_zh = 242;
+	public static final int LANGUAGE_zh_Hans = 14093;
+	public static final int LANGUAGE_zh_Hant = 14822;
+
 	public native int getType();
 	public native int getFlags();
 	public native void setFlags(int flags);
@@ -99,6 +109,8 @@ public class PDFAnnotation
 	public native void setColor(float[] color);
 	public native float[] getInteriorColor();
 	public native void setInteriorColor(float[] color);
+	public native float getOpacity();
+	public native void setOpacity(float opacity);
 	public native String getAuthor();
 	public native void setAuthor(String author);
 	protected native long getCreationDateNative();
@@ -207,7 +219,54 @@ public class PDFAnnotation
 	public native void eventFocus();
 	public native void eventBlur();
 
+	public native void updateAppearance();
 	public native boolean update();
 
 	public native PDFObject getObject();
+
+	public native int getLanguage();
+	public native void setLanguage(int lang);
+
+	public native int getQuadding();
+	public native void setQuadding(int quadding);
+
+	public native Point[] getLine();
+	public native void setLine(Point a, Point b);
+
+	public native DefaultAppearance getDefaultAppearance();
+	public native void setDefaultAppearance(String font, float size, float[] color);
+
+	protected native void setNativeAppearance(String appearance, String state, Matrix ctm, Rect bbox, PDFObject res, Buffer contents);
+	protected native void setNativeAppearanceDisplayList(String appearance, String state, Matrix ctm, DisplayList list);
+
+	public void setAppearance(String appearance, String state, Matrix ctm, Rect bbox, PDFObject res, Buffer contents) {
+		setNativeAppearance(appearance, state, ctm, bbox, res, contents);
+	}
+	public void setAppearance(String appearance, Matrix ctm, Rect bbox, PDFObject res, Buffer contents) {
+		setNativeAppearance(appearance, null, ctm, bbox, res, contents);
+	}
+	public void setAppearance(String appearance, Rect bbox, PDFObject res, Buffer contents) {
+		setNativeAppearance(appearance, null, null, bbox, res, contents);
+	}
+	public void setAppearance(Matrix ctm, Rect bbox, PDFObject res, Buffer contents) {
+		setNativeAppearance(null, null, ctm, bbox, res, contents);
+	}
+	public void setAppearance(Rect bbox, PDFObject res, Buffer contents) {
+		setNativeAppearance(null, null, null, bbox, res, contents);
+	}
+	public void setAppearance(String appearance, String state, Matrix ctm, DisplayList list) {
+		setNativeAppearanceDisplayList(appearance, state, ctm, list);
+	}
+	public void setAppearance(String appearance, Matrix ctm, DisplayList list) {
+		setNativeAppearanceDisplayList(appearance, null, ctm, list);
+	}
+	public void setAppearance(String appearance, DisplayList list) {
+		setNativeAppearanceDisplayList(appearance, null, null, list);
+	}
+	public void setAppearance(Matrix ctm, DisplayList list) {
+		setNativeAppearanceDisplayList(null, null, ctm, list);
+	}
+	public void setAppearance(DisplayList list) {
+		setNativeAppearanceDisplayList(null, null, null, list);
+	}
 }

@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -6,7 +6,7 @@
 #include "utils/FileUtil.h"
 
 // Start directory traversal in a given dir
-bool DirIter::StartDirIter(const WCHAR* dir) {
+bool DirIter::StartDirIter(std::wstring_view dir) {
     currDir.SetCopy(dir);
     AutoFreeWstr pattern(path::Join(currDir, L"*"));
     currFindHandle = FindFirstFile(pattern, &currFindData);
@@ -21,7 +21,7 @@ bool DirIter::TryNextDir() {
         AutoFreeWstr nextDir(dirsToVisit.Pop());
         // it's ok if we fail, this might be an auth problem,
         // we keep going
-        bool ok = StartDirIter(nextDir);
+        bool ok = StartDirIter(nextDir.AsView());
         if (ok) {
             return true;
         }
@@ -162,7 +162,7 @@ bool CollectFilesFromDirectory(std::string_view dir, VecStr& files,
     do {
         isFile = IsRegularFile(fdata.dwFileAttributes);
         if (isFile) {
-            AutoFreeStr name = strconv::WstrToUtf8(fdata.cFileName);
+            auto name = TempToUtf8(fdata.cFileName);
             AutoFreeStr filePath = path::JoinUtf(dir.data(), name.Get(), nullptr);
             bool matches = true;
             if (fileMatchesFn) {

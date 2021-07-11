@@ -1,13 +1,11 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
 #include "utils/FileUtil.h"
-
-#if OS_WIN
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
-#endif
+#include "utils/Log.h"
 
 // we pad data read with 3 zeros for convenience. That way returned
 // data is a valid null-terminated string or WCHAR*.
@@ -39,7 +37,7 @@ std::string_view GetBaseName(std::string_view path) {
             break;
         }
     }
-    const char* res = str::DupN(s, end - s);
+    const char* res = str::Dup(s, end - s);
     return res;
 }
 
@@ -96,7 +94,6 @@ bool IsDirectory(std::string_view path) {
     return false;
 }
 
-#if OS_WIN
 bool IsSep(WCHAR c) {
     return '\\' == c || '/' == c;
 }
@@ -135,18 +132,18 @@ WCHAR* GetDir(const WCHAR* path) {
     }
     if (baseName == path + 1) {
         // relative root
-        return str::DupN(path, 1);
+        return str::Dup(path, 1);
     }
     if (baseName == path + 3 && path[1] == ':') {
         // local drive root
-        return str::DupN(path, 3);
+        return str::Dup(path, 3);
     }
     if (baseName == path + 2 && str::StartsWith(path, L"\\\\")) {
         // server root
         return str::Dup(path);
     }
     // any subdirectory
-    return str::DupN(path, baseName - path - 1);
+    return str::Dup(path, baseName - path - 1);
 }
 
 // caller has to free() the results
@@ -159,27 +156,31 @@ std::string_view GetDir(std::string_view pathSV) {
     }
     if (baseName == path + 1) {
         // relative root
-        return str::DupN(path, 1);
+        return str::Dup(path, 1);
     }
     if (baseName == path + 3 && path[1] == ':') {
         // local drive root
-        return str::DupN(path, 3);
+        return str::Dup(path, 3);
     }
     if (baseName == path + 2 && str::StartsWith(path, "\\\\")) {
         // server root
         return str::Dup(path);
     }
     // any subdirectory
-    return str::DupN(path, baseName - path - 1);
+    return str::Dup(path, baseName - path - 1);
 }
 
 WCHAR* Join(const WCHAR* path, const WCHAR* fileName, const WCHAR* fileName2) {
+    // TODO: not sure if should allow null path
     if (IsSep(*fileName)) {
         fileName++;
     }
     const WCHAR* sepStr = nullptr;
-    if (!IsSep(path[str::Len(path) - 1])) {
-        sepStr = L"\\";
+    size_t pathLen = str::Len(path);
+    if (pathLen > 0) {
+        if (!IsSep(path[pathLen - 1])) {
+            sepStr = L"\\";
+        }
     }
     WCHAR* res = str::Join(path, sepStr, fileName);
     if (fileName2) {
@@ -393,11 +394,11 @@ static bool MatchWildcardsRec(const WCHAR* fileName, const WCHAR* filter) {
    having any extension) */
 bool Match(const WCHAR* path, const WCHAR* filter) {
     path = GetBaseNameNoFree(path);
-    while (str::FindChar(filter, ';')) {
+    while (str::FindChar(filter, L';')) {
         if (MatchWildcardsRec(path, filter)) {
             return true;
         }
-        filter = str::FindChar(filter, ';') + 1;
+        filter = str::FindChar(filter, L';') + 1;
     }
     return MatchWildcardsRec(path, filter);
 }
@@ -438,8 +439,6 @@ WCHAR* GetPathOfFileInAppDir(const WCHAR* fileName) {
     AutoFreeWstr path = path::Join(moduleDir, fileName);
     return path::Normalize(path);
 }
-
-#endif // OS_WIN
 } // namespace path
 
 namespace file {
@@ -449,12 +448,8 @@ FILE* OpenFILE(const char* path) {
     if (!path) {
         return nullptr;
     }
-#if OS_WIN
     AutoFreeWstr pathW = strconv::Utf8ToWstr(path);
     return OpenFILE(pathW.Get());
-#else
-    return fopen(path, "rb");
-#endif
 }
 
 std::span<u8> ReadFileWithAllocator(const char* filePath, Allocator* allocator) {
@@ -463,12 +458,16 @@ std::span<u8> ReadFileWithAllocator(const char* filePath, Allocator* allocator) 
     strconv::Utf8ToWcharBuf(filePath, str::Len(filePath), buf, dimof(buf));
     return ReadFileWithAllocator(buf, fileSizeOut, allocator);
 #else
+    char* d = nullptr;
+    int res;
     FILE* fp = OpenFILE(filePath);
     if (!fp) {
         return {};
     }
-    char* d = nullptr;
-    int res = fseek(fp, 0, SEEK_END);
+    defer {
+        fclose(fp);
+    };
+    res = fseek(fp, 0, SEEK_END);
     if (res != 0) {
         return {};
     }
@@ -489,16 +488,19 @@ std::span<u8> ReadFileWithAllocator(const char* filePath, Allocator* allocator) 
     nRead = fread((void*)d, 1, size, fp);
     if (nRead != size) {
         int err = ferror(fp);
-        CrashIf(err == 0);
         int isEof = feof(fp);
-        CrashIf(isEof != 0);
+        logf("ReadFileWithAllocator: fread() failed, path: '%s', size: %d, nRead: %d, err: %d, isEof: %d\n", filePath,
+             (int)size, (int)nRead, err, isEof);
+        // we should either get eof or err
+        // either way shouldn't happen because we're reading the exact size of file
+        // I've seen this in crash reports so maybe the files are over-written
+        // between the time I do fseek() and fread()
+        CrashIf(!(isEof || (err != 0)));
         goto Error;
     }
 
-    fclose(fp);
     return {(u8*)d, size};
 Error:
-    fclose(fp);
     Allocator::Free(allocator, (void*)d);
     return {};
 #endif
@@ -514,8 +516,7 @@ std::span<u8> ReadFile(const WCHAR* filePath) {
 }
 
 bool WriteFile(const char* filePath, std::span<u8> d) {
-    WCHAR buf[512];
-    strconv::Utf8ToWcharBuf(filePath, str::Len(filePath), buf, dimof(buf));
+    auto buf = TempToWstr(filePath);
     return WriteFile(buf, d);
 }
 
@@ -526,7 +527,6 @@ bool Exists(std::string_view path) {
     return exists;
 }
 
-#if OS_WIN
 HANDLE OpenReadOnly(const WCHAR* filePath) {
     return CreateFile(filePath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 }
@@ -663,28 +663,29 @@ bool StartsWith(const WCHAR* filePath, const char* s) {
     return file::StartsWithN(filePath, s, str::Len(s));
 }
 
-int GetZoneIdentifier(const WCHAR* filePath) {
-    AutoFreeWstr path(str::Join(filePath, L":Zone.Identifier"));
-    return GetPrivateProfileIntW(L"ZoneTransfer", L"ZoneId", URLZONE_INVALID, path);
+int GetZoneIdentifier(const char* filePath) {
+    AutoFreeStr path(str::Join(filePath, ":Zone.Identifier"));
+    auto pathW = TempToWstr(path.AsView());
+    return GetPrivateProfileIntW(L"ZoneTransfer", L"ZoneId", URLZONE_INVALID, pathW);
 }
 
-bool SetZoneIdentifier(const WCHAR* filePath, int zoneId) {
-    AutoFreeWstr path(str::Join(filePath, L":Zone.Identifier"));
+bool SetZoneIdentifier(const char* filePath, int zoneId) {
+    AutoFreeStr path(str::Join(filePath, ":Zone.Identifier"));
     AutoFreeWstr id(str::Format(L"%d", zoneId));
-    return WritePrivateProfileStringW(L"ZoneTransfer", L"ZoneId", id, path);
+    auto pathW = TempToWstr(path.AsView());
+    return WritePrivateProfileStringW(L"ZoneTransfer", L"ZoneId", id, pathW);
 }
 
-bool DeleteZoneIdentifier(const WCHAR* filePath) {
-    AutoFreeWstr path(str::Join(filePath, L":Zone.Identifier"));
-    return !!DeleteFileW(path.Get());
+bool DeleteZoneIdentifier(const char* filePath) {
+    AutoFreeStr path(str::Join(filePath, ":Zone.Identifier"));
+    auto pathW = TempToWstr(path.AsView());
+    return !!DeleteFileW(pathW);
 }
 
-#endif // OS_WIN
 } // namespace file
 
 namespace dir {
 
-#if OS_WIN
 // TODO: duplicate with path::IsDirectory()
 bool Exists(const WCHAR* dir) {
     if (nullptr == dir) {
@@ -735,12 +736,8 @@ bool RemoveAll(const WCHAR* dir) {
     return res == 0;
 }
 
-#endif // OS_WIN
-
 } // namespace dir
 
-#if OS_WIN
 bool FileTimeEq(const FILETIME& a, const FILETIME& b) {
     return a.dwLowDateTime == b.dwLowDateTime && a.dwHighDateTime == b.dwHighDateTime;
 }
-#endif
