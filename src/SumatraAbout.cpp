@@ -767,15 +767,6 @@ void DrawStartPage(WindowInfo* win, HDC hdc, FileHistory& fileHistory, COLORREF 
     SetTextColor(hdc, col);
     SelectObject(hdc, penLinkLine);
 
-    HIMAGELIST himl = (HIMAGELIST)SendMessageW(win->hwndToolbar, TB_GETIMAGELIST, 0, 0);
-    Rect rectIcon(offset.x, rc.y, 0, 0);
-    ImageList_GetIconSize(himl, &rectIcon.dx, &rectIcon.dy);
-    rectIcon.y += (rc.dy - rectIcon.dy) / 2;
-    if (isRtl) {
-        rectIcon.x = rc.dx - offset.x - rectIcon.dx;
-    }
-    ImageList_Draw(himl, 0 /* index of Open icon */, hdc, rectIcon.x, rectIcon.y, ILD_NORMAL);
-
     Rect rect = DrawHideFrequentlyReadLink(win->hwndCanvas, hdc, _TR("Hide frequently read"));
     win->staticLinks.Append(StaticLinkInfo(rect, kLinkHideList));
 }
