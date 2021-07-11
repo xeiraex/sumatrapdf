@@ -5,16 +5,13 @@ import (
 	"fmt"
 	"html"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/kjk/fmthtml"
 	"github.com/kjk/notionapi"
-	"github.com/kjk/notionapi/caching_downloader"
 	"github.com/kjk/notionapi/tohtml"
 	"github.com/kjk/u"
 )
@@ -69,19 +66,14 @@ func guessExt(fileName string, contentType string) string {
 }
 
 func downloadImage(c *notionapi.Client, uri string) ([]byte, string, error) {
-	img, err := c.DownloadFile(uri)
+	resp, err := c.DownloadURL(uri)
 	if err != nil {
-		// TODO: getSignedURLs stopped working so we need this workaround
-		// should move this logic down to c.DownloadFile()
-		uri = "https://www.notion.so/image/" + url.PathEscape(uri)
-		img, err = c.DownloadFile(uri)
-	}
-	if err != nil {
-		logf("\n  failed with %s\n", err)
 		return nil, "", err
 	}
-	ext := guessExt(uri, img.Header.Get("Content-Type"))
-	return img.Data, ext, nil
+	contentType := resp.Header.Get("Content-Type")
+	// TODO: sniff from content
+	ext := guessExt(uri, contentType)
+	return resp.Data, ext, nil
 }
 
 // return path of cached image on disk
@@ -117,24 +109,25 @@ func downloadAndCacheImage(c *notionapi.Client, uri string) (string, error) {
 
 func eventObserver(ev interface{}) {
 	switch v := ev.(type) {
-	case *caching_downloader.EventError:
+	case *notionapi.EventError:
 		logf(v.Error)
-	case *caching_downloader.EventDidDownload:
+	case *notionapi.EventDidDownload:
 		nDownloadedPage++
 		logf("%03d '%s' : downloaded in %s\n", nDownloadedPage, v.PageID, v.Duration)
-	case *caching_downloader.EventDidReadFromCache:
+	case *notionapi.EventDidReadFromCache:
 		// TODO: only verbose
 		nDownloadedPage++
 		logf("%03d '%s' : read from cache in %s\n", nDownloadedPage, v.PageID, v.Duration)
-	case *caching_downloader.EventGotVersions:
+	case *notionapi.EventGotVersions:
 		logf("downloaded info about %d versions in %s\n", v.Count, v.Duration)
 	}
 }
 
 func newNotionClient() *notionapi.Client {
-	token := os.Getenv("NOTION_TOKEN")
-	panicIf(token == "", "NOTION_TOKEN env variable not set, needed for downloading images\n")
-	// TODO: verify token still valid, somehow
+	//token := os.Getenv("NOTION_TOKEN")
+	//panicIf(token == "", "NOTION_TOKEN env variable not set, needed for downloading images\n")
+	// Note: public page, no need for a token
+	token := ""
 	client := &notionapi.Client{
 		AuthToken: token,
 	}
@@ -231,7 +224,7 @@ func normalizeID(id string) string {
 
 // RenderImage downloads and renders an image
 func (c *HTMLConverter) RenderImage(block *notionapi.Block) bool {
-	link := block.Source
+	link := block.ImageURL
 	path, err := downloadAndCacheImage(c.client, link)
 	if err != nil {
 		logf("genImage: downloadAndCacheImage('%s') from page https://notion.so/%s failed with '%s'\n", link, normalizeID(c.page.ID), err)
@@ -342,10 +335,8 @@ func (c *HTMLConverter) GenerateHTML() []byte {
 	title := page.Title
 	s = strings.Replace(tmpl, "{{InnerHTML}}", s, 1)
 	s = strings.Replace(s, "{{Title}}", title, 1)
+	s = strings.Replace(s, `<details open="">`, `<details>`, -1)
 	d := []byte(s)
-	if false {
-		d = fmthtml.Format(d)
-	}
 	return d
 }
 
@@ -359,13 +350,24 @@ func notionToHTML(client *notionapi.Client, page *notionapi.Page, pages []*notio
 	u.WriteFileMust(path, html)
 }
 
+func checkPrettierExist() {
+	cmd := exec.Command("prettier", "-v")
+	err := cmd.Run()
+	if err != nil {
+		logf("prettier doesn't seem to be installed. Install with:\n")
+		logf("npm i -g prettier\n")
+		os.Exit(1)
+	}
+}
+
 func websiteImportNotion() {
 	logf("websiteImportNotion() started\n")
+	checkPrettierExist()
 	must(os.Chdir("website"))
 	client := newNotionClient()
-	cache, err := caching_downloader.NewDirectoryCache(cacheDir)
+	client.DebugLog = true
+	d, err := notionapi.NewCachingClient(cacheDir, client)
 	must(err)
-	d := caching_downloader.New(cache, client)
 	d.EventObserver = eventObserver
 	d.RedownloadNewerVersions = true
 	//d.NoReadCache = flgNoCache
@@ -375,15 +377,24 @@ func websiteImportNotion() {
 		notionToHTML(client, page, pages, d.IdToPage)
 	}
 
-	if false {
+	// run formatting in background to get to preview sooner
+	go func() {
+		// to install prettier: npm i -g prettier
+		// TODO: automatically install if not installed
+		cmd := exec.Command("prettier", "--html-whitespace-sensitivity", "strict", "--write", `*.html`)
+		cmd.Dir = "docs" // only imported pages from notion
+		u.RunCmdLoggedMust(cmd)
+	}()
+
+	if true {
 		// using https://github.com/netlify/cli
-		cmd := exec.Command("netlify", "dev", "--dir", "website")
+		cmd := exec.Command("netlify", "dev", "--dir", ".")
 		u.RunCmdLoggedMust(cmd)
 	}
 
 	if false {
-		err = os.Chdir("website")
-		must(err)
+		//err = os.Chdir("website")
+		//must(err)
 		u.OpenBrowser("free-pdf-reader.html")
 	}
 }

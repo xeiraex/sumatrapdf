@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 struct ChmDoc;
@@ -37,7 +37,7 @@ struct ChmModel : Controller {
     void ScrollToLink(PageDestination* link) override;
     PageDestination* GetNamedDest(const WCHAR* name) override;
 
-    void GetDisplayState(DisplayState* ds) override;
+    void GetDisplayState(FileState* ds) override;
     // asynchronously calls saveThumbnail (fails silently)
     void CreateThumbnail(Size size, const onBitmapRenderedCb& saveThumbnail) override;
 

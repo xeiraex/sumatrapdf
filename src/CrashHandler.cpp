@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD */
 
 #include "utils/BaseUtil.h"
@@ -202,6 +202,12 @@ static bool ExtractSymbols(const u8* archiveData, size_t dataSize, char* dstDir,
 // note: to simplify callers, it could choose pdbZipPath by itself (in a temporary
 // directory) as the file is deleted on exit anyway
 static bool DownloadAndUnzipSymbols(const WCHAR* symDir) {
+    if (gDisableSymbolsDownload) {
+        // don't care about debug builds because we don't release them
+        dbglog("DownloadAndUnzipSymbols: DEBUG build so not doing anything\n");
+        return false;
+    }
+
     dbglogf(L"DownloadAndUnzipSymbols: symDir: '%s', url: '%s'\n", symDir, gSymbolsUrl);
     if (!symDir || !dir::Exists(symDir)) {
         dbglog("DownloadAndUnzipSymbols: exiting because symDir doesn't exist\n");
@@ -209,12 +215,6 @@ static bool DownloadAndUnzipSymbols(const WCHAR* symDir) {
     }
 
     DeleteSymbolsIfExist();
-
-    if (gDisableSymbolsDownload) {
-        // don't care about debug builds because we don't release them
-        dbglog("DownloadAndUnzipSymbols: DEBUG build so not doing anything\n");
-        return false;
-    }
 
     HttpRsp rsp;
     if (!HttpGet(gSymbolsUrl, &rsp)) {
@@ -225,9 +225,7 @@ static bool DownloadAndUnzipSymbols(const WCHAR* symDir) {
         dbglog("DownloadAndUnzipSymbols: HttpRspOk() returned false\n");
     }
 
-    char symDirUtf[512];
-
-    strconv::WcharToUtf8Buf(symDir, symDirUtf, sizeof(symDirUtf));
+    auto symDirUtf = TempToUtf8(symDir);
     bool ok = ExtractSymbols((const u8*)rsp.data.Get(), rsp.data.size(), symDirUtf, gCrashHandlerAllocator);
     if (!ok) {
         dbglog("DownloadAndUnzipSymbols: ExtractSymbols() failed\n");
@@ -384,7 +382,7 @@ static void GetOsVersion(str::Str& s) {
     OSVERSIONINFOEX ver = {0};
     ver.dwOSVersionInfoSize = sizeof(ver);
 #pragma warning(push)
-#pragma warning(disable : 4996)  // 'GetVersionEx': was declared deprecated
+#pragma warning(disable : 4996) // 'GetVersionEx': was declared deprecated
 #pragma warning(disable : 28159) // Consider using 'IsWindows*' instead of 'GetVersionExW'
     // see: https://msdn.microsoft.com/en-us/library/windows/desktop/dn424972(v=vs.85).aspx
     // starting with Windows 8.1, GetVersionEx will report a wrong version number

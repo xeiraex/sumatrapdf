@@ -73,7 +73,7 @@ body {
 <h2>Customizing SumatraPDF %VER%</h2>
 
 <p>You can change the look and behavior of
-<a href="http://www.sumatrapdfreader.org/">SumatraPDF</a>
+<a href="https://www.sumatrapdfreader.org/">SumatraPDF</a>
 by editing the file <code>SumatraPDF-settings.txt</code>. The file is stored in
 <code>%LOCALAPPDATA%\SumatraPDF</code> directory for the installed version or in the
 same directory as <code>SumatraPDF.exe</code> executable for the portable version.</p>
@@ -316,12 +316,12 @@ func websiteSettingsDir() string {
 
 func langsFileName() string {
 	ver := extractSumatraVersionMust()
-	return fmt.Sprintf("langs%s.html", ver)
+	return fmt.Sprintf("langs%s.html", urlizeVersion(ver))
 }
 
 func settingsFileName() string {
 	ver := extractSumatraVersionMust()
-	return fmt.Sprintf("settings%s.html", ver)
+	return fmt.Sprintf("settings%s.html", urlizeVersion(ver))
 }
 
 func genLangsHTML() {

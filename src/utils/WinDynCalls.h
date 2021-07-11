@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
 License: Simplified BSD (see COPYING.BSD) */
 
 /*
@@ -67,6 +67,7 @@ NORMALIZ_API_LIST(API_DECLARATION)
     V(SetDllDirectoryW)         \
     V(SetDefaultDllDirectories) \
     V(RtlCaptureContext)        \
+    V(RtlCaptureStackBackTrace) \
     V(SetProcessMitigationPolicy)
 
 KERNEL32_API_LIST(API_DECLARATION2)

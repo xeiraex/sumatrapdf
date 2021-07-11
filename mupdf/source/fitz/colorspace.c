@@ -319,6 +319,11 @@ fz_new_colorspace(fz_context *ctx, enum fz_colorspace_type type, int flags, int 
 	fz_colorspace *cs = fz_malloc_struct(ctx, fz_colorspace);
 	FZ_INIT_KEY_STORABLE(cs, 1, fz_drop_colorspace_imp);
 
+	if (n > FZ_MAX_COLORS)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "too many color components (%d > %d)", n, FZ_MAX_COLORS);
+	if (n < 1)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "too few color components (%d < 1)", n);
+
 	fz_try(ctx)
 	{
 		cs->type = type;
@@ -875,6 +880,29 @@ static void separation_via_base(fz_context *ctx, fz_color_converter *cc, const f
 	cc->convert_via(ctx, cc, base, dst);
 }
 
+static void indexed_via_separation_via_base(fz_context *ctx, fz_color_converter *cc, const float *src, float *dst)
+{
+	fz_colorspace *ss = cc->ss_via;
+	fz_colorspace *ssep = cc->ss_via->u.indexed.base;
+	const unsigned char *lookup = ss->u.indexed.lookup;
+	int high = ss->u.indexed.high;
+	int n = ss->u.indexed.base->n;
+	float base[4], mid[FZ_MAX_COLORS];
+	int i, k;
+
+	/* First map through the index. */
+	i = src[0] * 255;
+	i = fz_clampi(i, 0, high);
+	for (k = 0; k < n; ++k)
+		mid[k] = lookup[i * n + k] / 255.0f;
+
+	/* Then map through the separation. */
+	ssep->u.separation.eval(ctx, ssep->u.separation.tint, mid, ssep->n, base, ssep->u.separation.base->n);
+
+	/* Then convert in the base. */
+	cc->convert_via(ctx, cc, base, dst);
+}
+
 static void
 fz_init_process_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *ss, fz_colorspace *ds, fz_colorspace *is, fz_color_params params)
 {
@@ -938,17 +966,28 @@ fz_find_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *
 
 	if (ss->type == FZ_COLORSPACE_INDEXED)
 	{
-		cc->ss = ss->u.indexed.base;
-		cc->ss_via = ss;
-		fz_init_process_color_converter(ctx, cc, ss->u.indexed.base, ds, is, params);
-		cc->convert_via = cc->convert;
-		cc->convert = indexed_via_base;
+		if (ss->u.indexed.base->type == FZ_COLORSPACE_SEPARATION)
+		{
+			cc->ss = ss->u.indexed.base->u.separation.base;
+			cc->ss_via = ss;
+			fz_init_process_color_converter(ctx, cc, cc->ss, ds, is, params);
+			cc->convert_via = cc->convert;
+			cc->convert = indexed_via_separation_via_base;
+		}
+		else
+		{
+			cc->ss = ss->u.indexed.base;
+			cc->ss_via = ss;
+			fz_init_process_color_converter(ctx, cc, cc->ss, ds, is, params);
+			cc->convert_via = cc->convert;
+			cc->convert = indexed_via_base;
+		}
 	}
 	else if (ss->type == FZ_COLORSPACE_SEPARATION)
 	{
 		cc->ss = ss->u.separation.base;
 		cc->ss_via = ss;
-		fz_init_process_color_converter(ctx, cc, ss->u.separation.base, ds, is, params);
+		fz_init_process_color_converter(ctx, cc, cc->ss, ds, is, params);
 		cc->convert_via = cc->convert;
 		cc->convert = separation_via_base;
 	}
@@ -991,23 +1030,30 @@ typedef struct fz_cached_color_converter
 static void fz_cached_color_convert(fz_context *ctx, fz_color_converter *cc_, const float *ss, float *ds)
 {
 	fz_cached_color_converter *cc = cc_->opaque;
-	float *val = fz_hash_find(ctx, cc->hash, ss);
-	int n = cc->base.ds->n * sizeof(float);
-
-	if (val)
+	if (cc->hash)
 	{
-		memcpy(ds, val, n);
-		return;
+		float *val = fz_hash_find(ctx, cc->hash, ss);
+		int n = cc->base.ds->n * sizeof(float);
+
+		if (val)
+		{
+			memcpy(ds, val, n);
+			return;
+		}
+
+		cc->base.convert(ctx, &cc->base, ss, ds);
+
+		val = Memento_label(fz_malloc_array(ctx, cc->base.ds->n, float), "cached_color_convert");
+		memcpy(val, ds, n);
+		fz_try(ctx)
+			fz_hash_insert(ctx, cc->hash, ss, val);
+		fz_catch(ctx)
+			fz_free(ctx, val);
 	}
-
-	cc->base.convert(ctx, &cc->base, ss, ds);
-
-	val = Memento_label(fz_malloc_array(ctx, cc->base.ds->n, float), "cached_color_convert");
-	memcpy(val, ds, n);
-	fz_try(ctx)
-		fz_hash_insert(ctx, cc->hash, ss, val);
-	fz_catch(ctx)
-		fz_free(ctx, val);
+	else
+	{
+		cc->base.convert(ctx, &cc->base, ss, ds);
+	}
 }
 
 void fz_init_cached_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *ss, fz_colorspace *ds, fz_colorspace *is, fz_color_params params)
@@ -1026,7 +1072,10 @@ void fz_init_cached_color_converter(fz_context *ctx, fz_color_converter *cc, fz_
 	fz_try(ctx)
 	{
 		fz_find_color_converter(ctx, &cached->base, ss, ds, is, params);
-		cached->hash = fz_new_hash_table(ctx, 256, n * sizeof(float), -1, fz_free);
+		if (n * sizeof(float) <= FZ_HASH_TABLE_KEY_LENGTH)
+			cached->hash = fz_new_hash_table(ctx, 256, n * sizeof(float), -1, fz_free);
+		else
+			fz_warn(ctx, "colorspace has too many components to be cached");
 	}
 	fz_catch(ctx)
 	{

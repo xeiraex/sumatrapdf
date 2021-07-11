@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD */
 
 /* Wrappers around dbghelp.dll that load it on demand and provide
@@ -104,20 +104,22 @@ static bool CanStackWalk() {
     return ok;
 }
 
+constexpr int kMaxSymLen = 512;
+
 // check if has access to valid .pdb symbols file by trying to resolve a symbol
 __declspec(noinline) bool CanSymbolizeAddress(DWORD64 addr) {
-    static const int MAX_SYM_LEN = 512;
-
-    char buf[sizeof(SYMBOL_INFO) + MAX_SYM_LEN * sizeof(char)];
+    char buf[sizeof(SYMBOL_INFO) + kMaxSymLen * sizeof(char)];
     SYMBOL_INFO* symInfo = (SYMBOL_INFO*)buf;
 
     memset(buf, 0, sizeof(buf));
     symInfo->SizeOfStruct = sizeof(SYMBOL_INFO);
-    symInfo->MaxNameLen = MAX_SYM_LEN;
+    symInfo->MaxNameLen = kMaxSymLen;
 
     DWORD64 symDisp = 0;
     BOOL ok = DynSymFromAddr(GetCurrentProcess(), addr, &symDisp, symInfo);
-    return ok && symInfo->Name[0];
+    int symLen = symInfo->NameLen;
+    char* name = symInfo->Name;
+    return ok && symLen > 4 && (name[0] != 0);
 }
 
 // a heuristic to test if we have symbols for our own binaries by testing if
@@ -217,7 +219,10 @@ void WriteMiniDump(const WCHAR* crashDumpFilePath, MINIDUMP_EXCEPTION_INFORMATIO
     CloseHandle(hFile);
 }
 
-static bool GetAddrInfo(void* addr, char* module, DWORD moduleLen, DWORD& sectionOut, DWORD_PTR& offsetOut) {
+// note: without __declspec(noinline) it would be mis-compiled to return false in release builds
+// making GetAddressInfo() not provide info about address
+__declspec(noinline) static bool GetAddrInfo(void* addr, char* moduleName, DWORD moduleLen, DWORD& sectionOut,
+                                             DWORD_PTR& offsetOut) {
     MEMORY_BASIC_INFORMATION mbi;
     if (0 == VirtualQuery(addr, &mbi, sizeof(mbi))) {
         return false;
@@ -228,10 +233,10 @@ static bool GetAddrInfo(void* addr, char* module, DWORD moduleLen, DWORD& sectio
         return false;
     }
 
-    if (!GetModuleFileNameA(hMod, module, moduleLen)) {
+    if (!GetModuleFileNameA(hMod, moduleName, moduleLen)) {
         return false;
     }
-    module[moduleLen - 1] = '\0';
+    moduleName[moduleLen - 1] = '\0';
 
     PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)mbi.AllocationBase;
     PIMAGE_NT_HEADERS pNtHeader = (PIMAGE_NT_HEADERS)((BYTE*)dosHeader + dosHeader->e_lfanew);
@@ -262,7 +267,7 @@ static void AppendAddress(str::Str& s, DWORD64 addr) {
     s.AppendFmt("%p", p);
 }
 
-static void GetAddressInfo(str::Str& s, DWORD64 addr) {
+void GetAddressInfo(str::Str& s, DWORD64 addr, bool compact) {
     static const int MAX_SYM_LEN = 512;
 
     char buf[sizeof(SYMBOL_INFO) + MAX_SYM_LEN * sizeof(char)];
@@ -279,16 +284,21 @@ static void GetAddressInfo(str::Str& s, DWORD64 addr) {
         symName = &(symInfo->Name[0]);
     }
 
-    char module[MAX_PATH] = {0};
+    char moduleName[MAX_PATH] = {0};
     DWORD section;
     DWORD_PTR offset;
-    if (GetAddrInfo((void*)addr, module, sizeof(module), section, offset)) {
-        str::ToLowerInPlace(module);
-        const char* moduleShort = path::GetBaseNameNoFree(module);
-        AppendAddress(s, addr);
-        s.AppendFmt(" %02X:", section);
-        AppendAddress(s, offset);
-        s.AppendFmt(" %s", moduleShort);
+    ok = GetAddrInfo((void*)addr, moduleName, sizeof(moduleName), section, offset);
+    if (ok) {
+        str::ToLowerInPlace(moduleName);
+        const char* moduleShort = path::GetBaseNameNoFree(moduleName);
+        if (compact) {
+            s.Append(moduleShort);
+        } else {
+            AppendAddress(s, addr);
+            s.AppendFmt(" %02X:", section);
+            AppendAddress(s, offset);
+            s.AppendFmt(" %s", moduleShort);
+        }
 
         if (symName) {
             s.AppendFmt("!%s+0x%x", symName, (int)symDisp);
@@ -328,7 +338,7 @@ static bool GetStackFrameInfo(str::Str& s, STACKFRAME64* stackFrame, CONTEXT* ct
         return false;
     }
 
-    GetAddressInfo(s, addr);
+    GetAddressInfo(s, addr, false);
     return true;
 }
 
@@ -489,7 +499,7 @@ void GetExceptionInfo(str::Str& s, EXCEPTION_POINTERS* excPointers) {
     s.AppendFmt("Exception: %08X %s\r\n", (int)excCode, ExceptionNameFromCode(excCode));
 
     s.AppendFmt("Faulting IP: ");
-    GetAddressInfo(s, (DWORD64)excRecord->ExceptionAddress);
+    GetAddressInfo(s, (DWORD64)excRecord->ExceptionAddress, false);
     if ((EXCEPTION_ACCESS_VIOLATION == excCode) || (EXCEPTION_IN_PAGE_ERROR == excCode)) {
         int readWriteFlag = (int)excRecord->ExceptionInformation[0];
         DWORD64 dataVirtAddr = (DWORD64)excRecord->ExceptionInformation[1];

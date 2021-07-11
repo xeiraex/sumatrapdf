@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 /*
@@ -37,7 +37,7 @@ enum class SettingType {
     ColorArray,
     FloatArray,
     IntArray,
-    StringArray,
+    Utf8StringArray,
     Comment,
     // same as Type_Struct but won't be written out in release builds
     Prerelease,

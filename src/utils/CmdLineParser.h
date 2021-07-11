@@ -1,4 +1,5 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 void ParseCmdLine(const WCHAR* cmdLine, WStrVec& out, int maxParts = -1);
+void ParseCmdLine(const char* cmdLine, WStrVec& out, int maxParts = -1);

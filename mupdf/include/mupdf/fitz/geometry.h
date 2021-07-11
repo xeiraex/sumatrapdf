@@ -217,19 +217,19 @@ static inline fz_irect fz_make_irect(int x0, int y0, int x1, int y1)
 	The bottom left corner is at (0, 0) and the top right corner
 	is at (1, 1).
 */
-extern const fz_rect fz_unit_rect;
+FZ_DATA extern const fz_rect fz_unit_rect;
 
 /**
 	An empty rectangle with an area equal to zero.
 */
-extern const fz_rect fz_empty_rect;
-extern const fz_irect fz_empty_irect;
+FZ_DATA extern const fz_rect fz_empty_rect;
+FZ_DATA extern const fz_irect fz_empty_irect;
 
 /**
 	An infinite rectangle.
 */
-extern const fz_rect fz_infinite_rect;
-extern const fz_irect fz_infinite_irect;
+FZ_DATA extern const fz_rect fz_infinite_rect;
+FZ_DATA extern const fz_irect fz_infinite_irect;
 
 /**
 	Check if rectangle is empty.
@@ -302,7 +302,7 @@ fz_irect_width(fz_irect r)
 }
 
 /**
-	Return the width of an irect. Invalid irects return 0.
+	Return the height of an irect. Invalid irects return 0.
 */
 static inline int
 fz_irect_height(fz_irect r)
@@ -341,7 +341,7 @@ typedef struct
 /**
 	Identity transform matrix.
 */
-extern const fz_matrix fz_identity;
+FZ_DATA extern const fz_matrix fz_identity;
 
 static inline fz_matrix fz_make_matrix(float a, float b, float c, float d, float e, float f)
 {

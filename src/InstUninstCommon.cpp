@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 // code used in both Installer.cpp and Uninstaller.cpp
@@ -30,7 +30,7 @@
 #include "CrashHandler.h"
 #include "Translations.h"
 
-#include "ifilter/PdfFilter.h"
+#include "ifilter/PdfFilterClsid.h"
 #include "previewer/PdfPreview.h"
 
 #include "SumatraConfig.h"
@@ -132,13 +132,9 @@ const WCHAR* gSupportedExtsSumatra[] = {
     L".fb2", L".fb2z", L".prc",  L".tif", L".tiff", L".jp2",  L".png",
     L".jpg",  L".jpeg", L".tga", L".gif",  nullptr
 };
-const WCHAR* gSupportedExtsRaMicro[] = { L".pdf", nullptr };
 // clang-format on
 
 const WCHAR** GetSupportedExts() {
-    if (gIsRaMicroBuild) {
-        return gSupportedExtsRaMicro;
-    }
     return gSupportedExtsSumatra;
 }
 

@@ -27,7 +27,7 @@ The supported input document formats are: pdf, xps, cbz, and epub.
 The supported output image formats are: pbm, pgm, ppm, pam, png,
 pwg, pcl and ps. The supported output vector formats are: svg, pdf,
 and debug trace (as xml). The supported output text formats are: plain
-text, html, and structured text (as xml).
+text, html, and structured text (as xml or json).
 
 <p>
 Options:
@@ -106,6 +106,9 @@ be used to check if rendering has changed.
 
 <dt> -A bits
 <dd> Specify how many bits of anti-aliasing to use. The default is 8.
+0 means no anti-aliasing,
+9 means no anti-aliasing, centre-of-pixel rule,
+10 means no anti-aliasing, any-part-of-a-pixel rule.
 
 <dt> -D
 <dd> Disable use of display lists. May cause slowdowns, but should

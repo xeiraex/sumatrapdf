@@ -1,5 +1,5 @@
 
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -12,7 +12,6 @@
 
 Kind kindFilePDF = "filePDF";
 Kind kindFilePS = "filePS";
-Kind kindFileVbkm = "fileVbkm";
 Kind kindFileXps = "fileXPS";
 Kind kindFileDjVu = "fileDjVu";
 Kind kindFileChm = "fileChm";
@@ -36,7 +35,7 @@ Kind kindFileRar = "fileRar";
 Kind kindFile7Z = "file7Z";
 Kind kindFileTar = "fileTar";
 Kind kindFileFb2 = "fileFb2";
-Kind kindFileDir = "fileDir";
+Kind kindDirectory = "directory";
 Kind kindFileEpub = "fileEpub";
 // TODO: introduce kindFileTealDoc?
 Kind kindFileMobi = "fileMobi";
@@ -64,7 +63,6 @@ Kind kindFileTxt = "fileTxt";
     V(".ps\0", kindFilePS)          \
     V(".ps.gz\0", kindFilePS)       \
     V(".eps\0", kindFilePS)         \
-    V(".vbkm\0", kindFileVbkm)      \
     V(".fb2\0", kindFileFb2)        \
     V(".fb2z\0", kindFileFb2)       \
     V(".zfb2\0", kindFileFb2)       \
@@ -241,7 +239,6 @@ static bool IsPSFileContent(std::span<u8> d) {
 }
 
 // detect file type based on file content
-// we don't support sniffing kindFileVbkm
 Kind GuessFileTypeFromContent(std::span<u8> d) {
     // TODO: sniff .fb2 content
     u8* data = d.data();
@@ -279,6 +276,14 @@ static bool IsEpubFile(const WCHAR* path) {
     if (!archive.Get()) {
         return false;
     }
+
+    // assume that if this file exists, this is a epub file
+    // https://github.com/sumatrapdfreader/sumatrapdf/issues/1801
+    AutoFree container(archive->GetFileDataByName("META-INF/container.xml"));
+    if (container.data) {
+        return true;
+    }
+
     AutoFree mimetype(archive->GetFileDataByName("mimetype"));
     if (!mimetype.data) {
         return false;
@@ -293,7 +298,7 @@ static bool IsEpubFile(const WCHAR* path) {
     }
     // a proper EPUB document has a "mimetype" file with content
     // "application/epub+zip" as the first entry in its ZIP structure
-    /* cf. http://forums.fofou.org/sumatrapdf/topic?id=2599331
+    /* cf. https://web.archive.org/web/20140201013228/http://forums.fofou.org:80/sumatrapdf/topic?id=2599331&comments=6
     if (!str::Eq(zip.GetFileName(0), L"mimetype"))
         return false; */
     if (str::Eq(mimetype.data, "application/epub+zip")) {
@@ -382,7 +387,7 @@ Kind GuessFileTypeFromName(const WCHAR* path) {
         return nullptr;
     }
     if (path::IsDirectory(path)) {
-        return kindFileDir;
+        return kindDirectory;
     }
     Kind res = GetKindByFileExt(path);
     if (res != nullptr) {

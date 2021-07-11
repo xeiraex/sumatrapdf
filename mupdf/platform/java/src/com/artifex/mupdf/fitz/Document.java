@@ -196,4 +196,5 @@ public class Document
 	public boolean isPDF() {
 		return false;
 	}
+
 }

@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 class SquareTreeNode {
@@ -8,12 +8,12 @@ class SquareTreeNode {
     ~SquareTreeNode();
 
     struct DataItem {
-        const char* key = nullptr;
+        const char* key{nullptr};
         union {
             const char* str;
             SquareTreeNode* child;
-        } value;
-        bool isChild = false;
+        } value{nullptr};
+        bool isChild{false};
 
         DataItem() = default;
         DataItem(const char* k, const char* string) {

@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <string.h>
 #include <math.h>
+#include <float.h>
 
 fz_pixmap *
 fz_keep_pixmap(fz_context *ctx, fz_pixmap *pix)
@@ -649,7 +650,7 @@ fz_copy_pixmap_rect(fz_context *ctx, fz_pixmap *dest, fz_pixmap *src, fz_irect b
 
 	b = fz_intersect_irect(b, fz_pixmap_bbox(ctx, dest));
 	b = fz_intersect_irect(b, fz_pixmap_bbox(ctx, src));
-	if (b.x1 <= b.x0 || b.y1 <= b.y0)
+	if (fz_is_empty_irect(b))
 		return;
 	w = (unsigned int)(b.x1 - b.x0);
 	y = (unsigned int)(b.y1 - b.y0);
@@ -1072,6 +1073,216 @@ fz_new_pixmap_from_1bpp_data(fz_context *ctx, int x, int y, int w, int h, unsign
 	return pixmap;
 }
 
+static float
+calc_percentile(int *hist, float thr, float scale, float minval, float maxval)
+{
+	float prct;
+	int k = 0, count = 0;
+
+	while (count < thr)
+		count += hist[k++];
+
+	if (k <= 0)
+		prct = k;
+	else
+	{
+		float c0 = count - thr;
+		float c1 = thr - (count - hist[k - 1]);
+		prct = (c1 * k + c0 * (k - 1)) / (c0 + c1);
+	}
+
+	prct /= scale;
+	prct += minval;
+	return fz_clamp(prct, minval, maxval);
+}
+
+static void
+calc_percentiles(fz_context *ctx, int nsamples, float *samples, float *minprct, float *maxprct)
+{
+	float minval, maxval, scale;
+	int *hist, size, k;
+
+	minval = maxval = samples[0];
+	for (k = 1; k < nsamples; k++)
+	{
+		minval = fz_min(minval, samples[k]);
+		maxval = fz_max(maxval, samples[k]);
+	}
+
+	if (minval - maxval == 0)
+	{
+		*minprct = *maxprct = minval;
+		return;
+	}
+
+	size = fz_mini(65535, nsamples);
+	scale = (size - 1) / (maxval - minval);
+
+	hist = fz_calloc(ctx, size, sizeof(int));
+
+	fz_try(ctx)
+	{
+		for (k = 0; k < nsamples; k++)
+			hist[(uint16_t) (scale * (samples[k] - minval))]++;
+
+		*minprct = calc_percentile(hist, 0.01f * nsamples, scale, minval, maxval);
+		*maxprct = calc_percentile(hist, 0.99f * nsamples, scale, minval, maxval);
+	}
+	fz_always(ctx)
+		fz_free(ctx, hist);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+}
+
+/* Tone mapping according to "Consistent Tone Reproduction" by Min H. Kim and Jan Kautz. */
+fz_pixmap *
+fz_new_pixmap_from_float_data(fz_context *ctx, fz_colorspace *cs, int w, int h, float *samples)
+{
+	fz_pixmap *pixmap = NULL;
+	unsigned char *dp;
+	float *sample;
+	float *lsamples = NULL;
+	float minsample, maxsample, mu;
+	float k1, d0, sigma, sigmasq2;
+	float minprct, maxprct, range;
+	int y, k, n = fz_colorspace_n(ctx, cs);
+	int nsamples = w * h * n;
+#define KIMKAUTZC1 (3.0f)
+#define KIMKAUTZC2 (0.5f)
+#define MAXLD (logf(300.0f))
+#define MINLD (logf(0.3f))
+
+	fz_var(pixmap);
+	fz_var(lsamples);
+
+	fz_try(ctx)
+	{
+		lsamples = fz_malloc(ctx, nsamples * sizeof(float));
+
+		mu = 0;
+		minsample = FLT_MAX;
+		maxsample = -FLT_MAX;
+
+		for (k = 0; k < nsamples; k++)
+		{
+			lsamples[k] = logf(samples[k] == 0 ? FLT_MIN : samples[k]);
+			mu += lsamples[k];
+			minsample = fz_min(minsample, lsamples[k]);
+			maxsample = fz_max(maxsample, lsamples[k]);
+		}
+
+		mu /= nsamples;
+		d0 = maxsample - minsample;
+		k1 = (MAXLD - MINLD) / d0;
+		sigma = d0 / KIMKAUTZC1;
+		sigmasq2 = sigma * sigma * 2;
+
+		for (k = 0; k < nsamples; k++)
+		{
+			float samplemu = samples[k] - mu;
+			float samplemu2 = samplemu * samplemu;
+			float w = expf(-samplemu2 / sigmasq2);
+			float k2 = (1 - k1) * w + k1;
+			samples[k] = expf(KIMKAUTZC2 * k2 * (lsamples[k] - mu) + mu);
+		}
+
+		calc_percentiles(ctx, nsamples, samples, &minprct, &maxprct);
+		range = maxprct - minprct;
+
+		pixmap = fz_new_pixmap(ctx, cs, w, h, NULL, 0);
+
+		dp = pixmap->samples + pixmap->stride * (h - 1);
+		sample = samples;
+
+		for (y = 0; y < h; y++)
+		{
+			unsigned char *dpp = dp;
+
+			for (k = 0; k < w * n; k++)
+				*dpp++ = 255.0f * (fz_clamp(*sample++, minprct, maxprct) - minprct) / range;
+
+			dp -= pixmap->stride;
+		}
+	}
+	fz_always(ctx)
+		fz_free(ctx, lsamples);
+	fz_catch(ctx)
+	{
+		fz_drop_pixmap(ctx, pixmap);
+		fz_rethrow(ctx);
+	}
+
+	return pixmap;
+}
+
+fz_pixmap *
+fz_new_pixmap_from_alpha_channel(fz_context *ctx, fz_pixmap *src)
+{
+	fz_pixmap *dst;
+	int w, h, n, x;
+	unsigned char *sp, *dp;
+
+	if (!src->alpha)
+		return NULL;
+
+	dst = fz_new_pixmap_with_bbox(ctx, NULL, fz_pixmap_bbox(ctx, src), NULL, 1);
+	w = src->w;
+	h = src->h;
+	n = src->n;
+	sp = src->samples + n - 1;
+	dp = dst->samples;
+
+	while (h--)
+	{
+		unsigned char *s = sp;
+		unsigned char *d = dp;
+		for (x = 0; x < w; ++x)
+		{
+			*d++ = *s;
+			s += n;
+		}
+		sp += src->stride;
+		dp += dst->stride;
+	}
+
+	return dst;
+}
+
+fz_pixmap *
+fz_new_pixmap_from_color_and_mask(fz_context *ctx, fz_pixmap *color, fz_pixmap *mask)
+{
+	fz_pixmap *dst;
+	int w = color->w;
+	int h = color->h;
+	int n = color->n;
+	int x, y, k;
+
+	if (color->alpha)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "color pixmap must not have an alpha channel");
+	if (mask->n != 1)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "mask pixmap must have exactly one channel");
+	if (mask->w != color->w || mask->h != color->h)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "color and mask pixmaps must be the same size");
+
+	dst = fz_new_pixmap_with_bbox(ctx, color->colorspace, fz_pixmap_bbox(ctx, color), NULL, 1);
+
+	for (y = 0; y < h; ++y)
+	{
+		unsigned char *cs = &color->samples[y * color->stride];
+		unsigned char *ms = &mask->samples[y * mask->stride];
+		unsigned char *ds = &dst->samples[y * dst->stride];
+		for (x = 0; x < w; ++x)
+		{
+			unsigned char a = *ms++;
+			for (k = 0; k < n; ++k)
+				*ds++ = fz_mul255(*cs++, a);
+			*ds++ = a;
+		}
+	}
+
+	return dst;
+}
+
 int
 fz_is_pixmap_monochrome(fz_context *ctx, fz_pixmap *pixmap)
 {
@@ -1124,7 +1335,7 @@ fz_subsample_pixmap_ARM(unsigned char *ptr, int w, int h, int f, int factor,
 	"ldr	r6, [r13,#4*12]		@ r6 = fwd			\n"
 	"ldr	r7, [r13,#4*13]		@ r7 = back			\n"
 	"subs	r2, r2, r3		@ r2 = h -= f			\n"
-	"blt	11f			@ Skip if less than a full row	\n"
+	"blt	12f			@ Skip if less than a full row	\n"
 	"1:				@ for (y = h; y > 0; y--) {	\n"
 	"ldr	r1, [r13]		@ r1 = w			\n"
 	"subs	r1, r1, r3		@ r1 = w -= f			\n"
@@ -1195,6 +1406,7 @@ fz_subsample_pixmap_ARM(unsigned char *ptr, int w, int h, int f, int factor,
 	"subs	r2, r2, r3		@ h -= f			\n"
 	"add	r0, r0, r14		@ s += fwd3			\n"
 	"bge	1b			@ }				\n"
+	"12:								\n"
 	"adds	r2, r2, r3		@ h += f			\n"
 	"beq	21f			@ if no stray row, end		\n"
 	"@ So doing one last (partial) row				\n"
@@ -1206,7 +1418,7 @@ fz_subsample_pixmap_ARM(unsigned char *ptr, int w, int h, int f, int factor,
 	"@ r4 = factor							\n"
 	"@ r5 = n							\n"
 	"@ r6 = fwd							\n"
-	"12:				@ for (y = h; y > 0; y--) {	\n"
+	"				@ for (y = h; y > 0; y--) {	\n"
 	"ldr	r1, [r13]		@ r1 = w			\n"
 	"ldr	r7, [r13,#4*21]		@ r7 = back5			\n"
 	"ldr	r8, [r13,#4*14]		@ r8 = back2			\n"

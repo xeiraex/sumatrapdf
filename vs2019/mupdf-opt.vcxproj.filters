@@ -37,6 +37,9 @@
     <Filter Include="mupdf\source\pdf">
       <UniqueIdentifier>{2ACCAEFC-16C5-CD4E-3FF7-B2D32B4FAD5A}</UniqueIdentifier>
     </Filter>
+    <Filter Include="mupdf\source\reflow">
+      <UniqueIdentifier>{DF97A05A-4BF9-7D68-D466-C41A40C7B427}</UniqueIdentifier>
+    </Filter>
     <Filter Include="mupdf\source\svg">
       <UniqueIdentifier>{40DBAEFC-2CD4-CD4E-5506-B3D3415EAD5A}</UniqueIdentifier>
     </Filter>
@@ -88,6 +91,9 @@
       <Filter>mupdf\include\mupdf\fitz</Filter>
     </ClInclude>
     <ClInclude Include="..\mupdf\include\mupdf\fitz\document.h">
+      <Filter>mupdf\include\mupdf\fitz</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mupdf\include\mupdf\fitz\export.h">
       <Filter>mupdf\include\mupdf\fitz</Filter>
     </ClInclude>
     <ClInclude Include="..\mupdf\include\mupdf\fitz\filter.h">
@@ -237,9 +243,6 @@
     <ClInclude Include="..\mupdf\include\mupdf\pdf\object.h">
       <Filter>mupdf\include\mupdf\pdf</Filter>
     </ClInclude>
-    <ClInclude Include="..\mupdf\include\mupdf\pdf\output-pdf.h">
-      <Filter>mupdf\include\mupdf\pdf</Filter>
-    </ClInclude>
     <ClInclude Include="..\mupdf\include\mupdf\pdf\page.h">
       <Filter>mupdf\include\mupdf\pdf</Filter>
     </ClInclude>
@@ -273,6 +276,9 @@
     <ClInclude Include="..\mupdf\source\fitz\glyph-imp.h">
       <Filter>mupdf\source\fitz</Filter>
     </ClInclude>
+    <ClInclude Include="..\mupdf\source\fitz\glyphbox.h">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClInclude>
     <ClInclude Include="..\mupdf\source\fitz\glyphlist.h">
       <Filter>mupdf\source\fitz</Filter>
     </ClInclude>
@@ -302,6 +308,12 @@
     </ClInclude>
     <ClInclude Include="..\mupdf\source\fitz\z-imp.h">
       <Filter>mupdf\source\fitz</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mupdf\source\pdf\annotation-icons.h">
+      <Filter>mupdf\source\pdf</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mupdf\source\pdf\pdf-annot-imp.h">
+      <Filter>mupdf\source\pdf</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -470,6 +482,9 @@
     <ClCompile Include="..\mupdf\source\fitz\glyph.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\glyphbox.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\halftone.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
@@ -506,7 +521,7 @@
     <ClCompile Include="..\mupdf\source\fitz\load-jpx.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
-    <ClCompile Include="..\mupdf\source\fitz\load-jxr.c">
+    <ClCompile Include="..\mupdf\source\fitz\load-jxr-win.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\load-png.c">
@@ -540,6 +555,9 @@
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\output-pclm.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\output-pdfocr.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\output-png.c">
@@ -737,6 +755,9 @@
     <ClCompile Include="..\mupdf\source\pdf\pdf-layer.c">
       <Filter>mupdf\source\pdf</Filter>
     </ClCompile>
+    <ClCompile Include="..\mupdf\source\pdf\pdf-layout.c">
+      <Filter>mupdf\source\pdf</Filter>
+    </ClCompile>
     <ClCompile Include="..\mupdf\source\pdf\pdf-lex.c">
       <Filter>mupdf\source\pdf</Filter>
     </ClCompile>
@@ -811,6 +832,9 @@
     </ClCompile>
     <ClCompile Include="..\mupdf\source\pdf\pdf-xref.c">
       <Filter>mupdf\source\pdf</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\reflow\reflow-doc.c">
+      <Filter>mupdf\source\reflow</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\svg\svg-color.c">
       <Filter>mupdf\source\svg</Filter>

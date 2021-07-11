@@ -8,6 +8,7 @@
 #include "mupdf/fitz/image.h"
 #include "mupdf/fitz/output.h"
 #include "mupdf/fitz/device.h"
+#include "mupdf/fitz/document.h"
 
 /**
 	Simple text layout (for use with annotation editing primarily).
@@ -96,6 +97,9 @@ typedef struct fz_stext_block fz_stext_block;
 	FZ_STEXT_PRESERVE_SPANS: If this option is set, spans on the same line
 	will not be merged. Each line will thus be a span of text with the same
 	font, colour, and size.
+
+	FZ_STEXT_MEDIABOX_CLIP: If this option is set, characters entirely
+	outside each page's mediabox will be ignored.
 */
 enum
 {
@@ -105,6 +109,7 @@ enum
 	FZ_STEXT_INHIBIT_SPACES = 8,
 	FZ_STEXT_DEHYPHENATE = 16,
 	FZ_STEXT_PRESERVE_SPANS = 32,
+	FZ_STEXT_MEDIABOX_CLIP = 64,
 };
 
 /**
@@ -166,7 +171,7 @@ struct fz_stext_char
 	fz_stext_char *next;
 };
 
-extern const char *fz_stext_options_usage;
+FZ_DATA extern const char *fz_stext_options_usage;
 
 /**
 	Create an empty text page.
@@ -324,5 +329,8 @@ fz_device *fz_new_stext_device(fz_context *ctx, fz_stext_page *page, const fz_st
 */
 fz_device *fz_new_ocr_device(fz_context *ctx, fz_device *target, fz_matrix ctm, fz_rect mediabox, int with_list, const char *language,
 			int (*progress)(fz_context *, void *, int), void *progress_arg);
+
+fz_document *fz_open_reflowed_document(fz_context *ctx, fz_document *underdoc, const fz_stext_options *opts);
+
 
 #endif

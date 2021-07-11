@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 enum HtmlParseError {
@@ -88,7 +88,7 @@ WCHAR* DecodeHtmlEntitites(const char* string, UINT codepage);
 namespace strconv {
 
 inline WCHAR* FromHtmlUtf8(const char* s, size_t len) {
-    AutoFree tmp(str::DupN(s, len));
+    AutoFree tmp(str::Dup(s, len));
     return DecodeHtmlEntitites(tmp, CP_UTF8);
 }
 

@@ -42,7 +42,17 @@ ifeq ($(OS),MACOS)
   SO := dylib
 else
   LDREMOVEUNREACH := -Wl,--gc-sections
-  SO := so
+  ifeq ($(OS),MINGW)
+    SO := dll
+  else
+    SO := so
+  endif
+endif
+
+ifeq "$(OS)" "ios"
+  NEONFLAGS =
+else
+  NEONFLAGS = -mneon
 endif
 
 SANITIZE_FLAGS += -fsanitize=address

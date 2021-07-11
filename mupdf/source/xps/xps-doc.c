@@ -116,7 +116,15 @@ static void
 xps_add_link_target(fz_context *ctx, xps_document *doc, char *name)
 {
 	xps_fixpage *page = doc->last_page;
-	xps_target *target = fz_malloc_struct(ctx, xps_target);
+	xps_target *target;
+
+	if (page == NULL)
+	{
+		fz_warn(ctx, "Dropping link target with no page");
+		return;
+	}
+
+	target = fz_malloc_struct(ctx, xps_target);
 
 	fz_try(ctx)
 	{
@@ -431,7 +439,6 @@ static void
 xps_drop_page_imp(fz_context *ctx, fz_page *page_)
 {
 	xps_page *page = (xps_page*)page_;
-	fz_drop_document(ctx, &page->doc->super);
 	fz_drop_xml(ctx, page->xml);
 }
 
@@ -453,13 +460,12 @@ xps_load_page(fz_context *ctx, fz_document *doc_, int chapter, int number)
 			xml = xps_load_fixed_page(ctx, doc, fix);
 			fz_try(ctx)
 			{
-				page = fz_new_derived_page(ctx, xps_page);
+				page = fz_new_derived_page(ctx, xps_page, doc_);
 				page->super.load_links = xps_load_links;
 				page->super.bound_page = xps_bound_page;
 				page->super.run_page_contents = xps_run_page;
 				page->super.drop_page = xps_drop_page_imp;
 
-				page->doc = (xps_document*) fz_keep_document(ctx, (fz_document*)doc);
 				page->fix = fix;
 				page->xml = xml;
 			}

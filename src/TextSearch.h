@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 enum class TextSearchDirection : bool { Backward = false, Forward = true };
@@ -49,9 +49,9 @@ class TextSearch : public TextSelection {
     PageAndOffset MatchEnd(const WCHAR* start) const;
 
     void Clear() {
-        str::ReplacePtr(&findText, nullptr);
-        str::ReplacePtr(&anchor, nullptr);
-        str::ReplacePtr(&lastText, nullptr);
+        str::ReplaceWithCopy(&findText, nullptr);
+        str::ReplaceWithCopy(&anchor, nullptr);
+        str::ReplaceWithCopy(&lastText, nullptr);
         Reset();
     }
     void Reset();

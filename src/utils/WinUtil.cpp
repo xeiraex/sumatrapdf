@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -108,7 +108,7 @@ void GetOsVersion(OSVERSIONINFOEX& ver) {
     ZeroMemory(&ver, sizeof(ver));
     ver.dwOSVersionInfoSize = sizeof(ver);
 #pragma warning(push)
-#pragma warning(disable : 4996)  // 'GetVersionEx': was declared deprecated
+#pragma warning(disable : 4996) // 'GetVersionEx': was declared deprecated
 #pragma warning(disable : 28159) // Consider using 'IsWindows*' instead of 'GetVersionExW'
     // see: https://msdn.microsoft.com/en-us/library/windows/desktop/dn424972(v=vs.85).aspx
     // starting with Windows 8.1, GetVersionEx will report a wrong version number
@@ -234,7 +234,7 @@ TryAgainWOW64:
             val = AllocArray<WCHAR>(valLen / sizeof(WCHAR) + 1);
             res = RegQueryValueEx(hKey, valName, nullptr, nullptr, (LPBYTE)val, &valLen);
             if (ERROR_SUCCESS != res) {
-                str::ReplacePtr(&val, nullptr);
+                str::ReplaceWithCopy(&val, nullptr);
             }
         }
         RegCloseKey(hKey);
@@ -260,7 +260,7 @@ char* ReadRegStrUtf8(HKEY keySub, const WCHAR* keyName, const WCHAR* valName) {
     }
     auto s = strconv::WstrToUtf8(ws);
     str::Free(ws);
-    return (char*)s.data();
+    return s;
 }
 
 WCHAR* ReadRegStr2(const WCHAR* keyName, const WCHAR* valName) {
@@ -687,8 +687,8 @@ bool LaunchElevated(const WCHAR* path, const WCHAR* cmdline) {
 
 /* Ensure that the rectangle is at least partially in the work area on a
    monitor. The rectangle is shifted into the work area if necessary. */
-Rect ShiftRectToWorkArea(Rect rect, bool bFully) {
-    Rect monitor = GetWorkAreaRect(rect);
+Rect ShiftRectToWorkArea(Rect rect, HWND hwnd, bool bFully) {
+    Rect monitor = GetWorkAreaRect(rect, hwnd);
 
     if (rect.y + rect.dy <= monitor.y || bFully && rect.y < monitor.y) {
         /* Rectangle is too far above work area */
@@ -729,9 +729,12 @@ void LimitWindowSizeToScreen(HWND hwnd, SIZE& size) {
 }
 
 // returns available area of the screen i.e. screen minus taskbar area
-Rect GetWorkAreaRect(Rect rect) {
+Rect GetWorkAreaRect(Rect rect, HWND hwnd) {
     RECT tmpRect = ToRECT(rect);
     HMONITOR hmon = MonitorFromRect(&tmpRect, MONITOR_DEFAULTTONEAREST);
+    if (hwnd) {
+        hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+    }
     MONITORINFO mi = {0};
     mi.cbSize = sizeof mi;
     BOOL ok = GetMonitorInfo(hmon, &mi);
@@ -794,9 +797,11 @@ void DrawCenteredText(HDC hdc, const RECT& r, const WCHAR* txt, bool isRTL) {
     DrawCenteredText(hdc, rc, txt, isRTL);
 }
 
-/* Return size of a text <txt> in a given <hwnd>, taking into account its font */
+// Return size of a text <txt> in a given <hwnd>, taking into account its font
 Size TextSizeInHwnd(HWND hwnd, const WCHAR* txt, HFONT font) {
-    SIZE sz{};
+    if (!txt || !*txt) {
+        return Size{};
+    }
     size_t txtLen = str::Len(txt);
     HDC dc = GetWindowDC(hwnd);
     /* GetWindowDC() returns dc with default state, so we have to first set
@@ -805,6 +810,7 @@ Size TextSizeInHwnd(HWND hwnd, const WCHAR* txt, HFONT font) {
         font = (HFONT)SendMessageW(hwnd, WM_GETFONT, 0, 0);
     }
     HGDIOBJ prev = SelectObject(dc, font);
+    SIZE sz{};
     GetTextExtentPoint32W(dc, txt, (int)txtLen, &sz);
     SelectObject(dc, prev);
     ReleaseDC(hwnd, dc);
@@ -875,7 +881,7 @@ void CenterDialog(HWND hDlg, HWND hParent) {
     rcDialog.Offset(rcOwner.x + (rcRect.x - rcDialog.x + rcRect.dx - rcDialog.dx) / 2,
                     rcOwner.y + (rcRect.y - rcDialog.y + rcRect.dy - rcDialog.dy) / 2);
     // ensure that the dialog is fully visible on one monitor
-    rcDialog = ShiftRectToWorkArea(rcDialog, true);
+    rcDialog = ShiftRectToWorkArea(rcDialog, hDlg, true);
 
     SetWindowPos(hDlg, 0, rcDialog.x, rcDialog.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 }
@@ -1433,25 +1439,25 @@ void ToForeground(HWND hwnd) {
 /* return text of window or edit control, nullptr in case of an error.
 caller needs to free() the result */
 WCHAR* GetText(HWND hwnd) {
-    size_t cchTxtLen = GetTextLen(hwnd);
-    WCHAR* txt = AllocArray<WCHAR>(cchTxtLen + 1);
+    size_t cchTxt = GetTextLen(hwnd);
+    WCHAR* txt = AllocArray<WCHAR>(cchTxt + 1);
     if (nullptr == txt) {
         return nullptr;
     }
-    SendMessageW(hwnd, WM_GETTEXT, cchTxtLen + 1, (LPARAM)txt);
-    txt[cchTxtLen] = 0;
+    SendMessageW(hwnd, WM_GETTEXT, cchTxt + 1, (LPARAM)txt);
+    txt[cchTxt] = 0;
     return txt;
 }
 
 str::Str GetTextUtf8(HWND hwnd) {
-    size_t cchTxtLen = GetTextLen(hwnd);
-    WCHAR* txt = AllocArray<WCHAR>(cchTxtLen + 1);
+    size_t cchTxt = GetTextLen(hwnd);
+    WCHAR* txt = AllocArray<WCHAR>(cchTxt + 1);
     if (nullptr == txt) {
         return str::Str();
     }
-    SendMessageW(hwnd, WM_GETTEXT, cchTxtLen + 1, (LPARAM)txt);
-    txt[cchTxtLen] = 0;
-    AutoFreeStr od = strconv::WstrToUtf8(txt, cchTxtLen);
+    SendMessageW(hwnd, WM_GETTEXT, cchTxt + 1, (LPARAM)txt);
+    txt[cchTxt] = 0;
+    AutoFreeStr od = strconv::WstrToUtf8(txt, cchTxt);
     free(txt);
     return {od.AsView()};
 }
@@ -1587,10 +1593,10 @@ void UpdateBitmapColors(HBITMAP hbmp, COLORREF textColor, COLORREF bgColor) {
 
     // color order in DIB is blue-green-red-alpha
     byte rt, gt, bt;
-    UnpackRgb(textColor, rt, gt, bt);
+    UnpackColor(textColor, rt, gt, bt);
     int base[4] = {bt, gt, rt, 0};
     byte rb, gb, bb;
-    UnpackRgb(bgColor, rb, gb, bb);
+    UnpackColor(bgColor, rb, gb, bb);
     int diff[4] = {(int)bb - base[0], (int)gb - base[1], (int)rb - base[2], 255};
 
     DIBSECTION info = {0};
@@ -1890,7 +1896,7 @@ std::span<u8> LoadDataResource(int resId) {
     if (!resData) {
         return {};
     }
-    char* s = str::DupN(resData, size);
+    char* s = str::Dup(resData, size);
     UnlockResource(res);
     return {(u8*)s, size};
 }
@@ -2244,7 +2250,17 @@ void HwndPositionToTheRightOf(HWND hwnd, HWND hwndRelative) {
     if (dyDiff > 0) {
         rHwnd.y += dyDiff / 2;
     }
-    Rect r = ShiftRectToWorkArea(rHwnd, true);
+    Rect r = ShiftRectToWorkArea(rHwnd, hwnd, true);
+    SetWindowPos(hwnd, 0, r.x, r.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+}
+
+void HwndPositionInCenterOf(HWND hwnd, HWND hwndRelative) {
+    Rect rHwndRelative = WindowRect(hwndRelative);
+    Rect rHwnd = WindowRect(hwnd);
+    int x = rHwndRelative.x + (rHwndRelative.dx / 2) - (rHwnd.dx / 2);
+    int y = rHwndRelative.y + (rHwndRelative.dy / 2) - (rHwnd.dy / 2);
+
+    Rect r = ShiftRectToWorkArea(Rect{x, y, rHwnd.dx, rHwnd.dy}, hwnd, true);
     SetWindowPos(hwnd, 0, r.x, r.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 }
 

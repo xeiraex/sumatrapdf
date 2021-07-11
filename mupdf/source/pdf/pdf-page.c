@@ -1,5 +1,5 @@
 #include "mupdf/fitz.h"
-#include "mupdf/pdf.h"
+#include "pdf-annot-imp.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -927,18 +927,15 @@ pdf_drop_page_imp(fz_context *ctx, pdf_page *page)
 	fz_drop_link(ctx, page->links);
 	pdf_drop_annots(ctx, page->annots);
 	pdf_drop_widgets(ctx, page->widgets);
-
 	pdf_drop_obj(ctx, page->obj);
-
-	fz_drop_document(ctx, &page->doc->super);
 }
 
 static pdf_page *
 pdf_new_page(fz_context *ctx, pdf_document *doc)
 {
-	pdf_page *page = fz_new_derived_page(ctx, pdf_page);
+	pdf_page *page = fz_new_derived_page(ctx, pdf_page, (fz_document*) doc);
 
-	page->doc = (pdf_document*) fz_keep_document(ctx, &doc->super);
+	page->doc = doc; /* typecast alias for page->super.doc */
 
 	page->super.drop_page = (fz_page_drop_page_fn*)pdf_drop_page_imp;
 	page->super.load_links = (fz_page_load_links_fn*)pdf_load_links;
@@ -1125,14 +1122,29 @@ pdf_load_page_imp(fz_context *ctx, fz_document *doc_, int chapter, int number)
 			page->transparency = 1;
 		else if (pdf_resources_use_blending(ctx, resources))
 			page->transparency = 1;
-		for (annot = page->annots; annot && !page->transparency; annot = annot->next)
-			if (annot->ap && pdf_resources_use_blending(ctx, pdf_xobject_resources(ctx, annot->ap)))
-				page->transparency = 1;
 		if (pdf_resources_use_overprint(ctx, resources))
 			page->overprint = 1;
-		for (annot = page->annots; annot && !page->overprint; annot = annot->next)
-			if (annot->ap && pdf_resources_use_overprint(ctx, pdf_xobject_resources(ctx, annot->ap)))
-				page->overprint = 1;
+		for (annot = page->annots; annot && !page->transparency; annot = annot->next)
+		{
+			fz_try(ctx)
+			{
+				pdf_obj *ap;
+				pdf_obj *res;
+				pdf_annot_push_local_xref(ctx, annot);
+				ap = pdf_annot_ap(ctx, annot);
+				if (!ap)
+					break;
+				res = pdf_xobject_resources(ctx, ap);
+				if (pdf_resources_use_blending(ctx, res))
+					page->transparency = 1;
+				if (pdf_resources_use_overprint(ctx, pdf_xobject_resources(ctx, res)))
+					page->overprint = 1;
+			}
+			fz_always(ctx)
+				pdf_annot_pop_local_xref(ctx, annot);
+			fz_catch(ctx)
+				fz_rethrow(ctx);
+		}
 	}
 	fz_catch(ctx)
 	{

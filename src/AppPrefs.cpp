@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -58,9 +58,6 @@ static int cmpFloat(const void* a, const void* b) {
 namespace prefs {
 
 const WCHAR* GetSettingsFileNameNoFree() {
-    if (gIsRaMicroBuild) {
-        return L"RAMicroPDF-settings.txt";
-    }
     return L"SumatraPDF-settings.txt";
 }
 
@@ -101,7 +98,7 @@ bool Load() {
 
     if (!gprefs->uiLanguage || !trans::ValidateLangCode(gprefs->uiLanguage)) {
         // guess the ui language on first start
-        str::ReplacePtr(&gprefs->uiLanguage, trans::DetectUserLang());
+        str::ReplaceWithCopy(&gprefs->uiLanguage, trans::DetectUserLang());
     }
     gprefs->lastPrefUpdate = file::GetModificationTime(path.Get());
     gprefs->defaultDisplayModeEnum = DisplayModeFromString(gprefs->defaultDisplayMode, DisplayMode::Automatic);
@@ -112,7 +109,7 @@ bool Load() {
     gprefs->openCountWeek = GetWeekCount();
     if (weekDiff > 0) {
         // "age" openCount statistics (cut in in half after every week)
-        for (DisplayState* ds : *gprefs->fileStates) {
+        for (FileState* ds : *gprefs->fileStates) {
             ds->openCount >>= weekDiff;
         }
     }
@@ -128,7 +125,8 @@ bool Load() {
 
     // TODO: verify that all states have a non-nullptr file path?
     gFileHistory.UpdateStatesSource(gprefs->fileStates);
-    SetDefaultEbookFont(gprefs->ebookUI.fontName, gprefs->ebookUI.fontSize);
+    AutoFreeWstr fontName = strconv::Utf8ToWstr(gprefs->ebookUI.fontName);
+    SetDefaultEbookFont(fontName.Get(), gprefs->ebookUI.fontSize);
 
     if (!file::Exists(path.Get())) {
         Save();
@@ -160,7 +158,7 @@ static void RememberSessionState() {
         }
         SessionData* data = NewSessionData();
         for (TabInfo* tab : win->tabs) {
-            DisplayState* ds = NewDisplayState(tab->filePath);
+            FileState* ds = NewDisplayState(tab->filePath);
             if (tab->ctrl) {
                 tab->ctrl->GetDisplayState(ds);
             }
@@ -188,7 +186,7 @@ static void RememberSessionState() {
 // the list of recently opened documents in sync)
 bool Save() {
     // don't save preferences without the proper permission
-    if (!HasPermission(Perm_SavePreferences)) {
+    if (!HasPermission(Perm::SavePreferences)) {
         return false;
     }
 
@@ -203,8 +201,8 @@ bool Save() {
     // remove entries which should (no longer) be remembered
     gFileHistory.Purge(!gGlobalPrefs->rememberStatePerDocument);
     // update display mode and zoom fields from internal values
-    str::ReplacePtr(&gGlobalPrefs->defaultDisplayMode, DisplayModeToString(gGlobalPrefs->defaultDisplayModeEnum));
-    ZoomToString(&gGlobalPrefs->defaultZoom, gGlobalPrefs->defaultZoomFloat);
+    str::ReplaceWithCopy(&gGlobalPrefs->defaultDisplayMode, DisplayModeToString(gGlobalPrefs->defaultDisplayModeEnum));
+    ZoomToString(&gGlobalPrefs->defaultZoom, gGlobalPrefs->defaultZoomFloat, nullptr);
 
     AutoFreeWstr path = GetSettingsPath();
     DebugCrashIf(!path.data);
@@ -310,7 +308,7 @@ void schedulePrefsReload() {
 }
 
 void RegisterForFileChanges() {
-    if (!HasPermission(Perm_SavePreferences)) {
+    if (!HasPermission(Perm::SavePreferences)) {
         return;
     }
 

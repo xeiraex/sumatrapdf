@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "BaseUtil.h"
@@ -182,7 +182,7 @@ const char* ResolveHtmlEntities(const char* s, const char* end, Allocator* alloc
 char* ResolveHtmlEntities(const char* s, size_t len) {
     const char* tmp = ResolveHtmlEntities(s, s + len, nullptr);
     if (tmp == s) {
-        return str::DupN(s, len);
+        return str::Dup(s, len);
     }
     return (char*)tmp;
 }

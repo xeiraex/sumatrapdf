@@ -1,6 +1,8 @@
 #ifndef MUPDF_PDF_DOCUMENT_H
 #define MUPDF_PDF_DOCUMENT_H
 
+#include "mupdf/fitz/export.h"
+
 typedef struct pdf_xref pdf_xref;
 typedef struct pdf_ocg_descriptor pdf_ocg_descriptor;
 
@@ -301,6 +303,11 @@ struct pdf_document
 	int num_incremental_sections;
 	int xref_base;
 	int disallow_new_increments;
+
+	/* The local_xref is only active, if local_xref_nesting >= 0 */
+	pdf_xref *local_xref;
+	int local_xref_nesting;
+
 	pdf_xref *xref_sections;
 	pdf_xref *saved_xref_sections;
 	int *xref_index;
@@ -377,6 +384,8 @@ struct pdf_document
 	pdf_obj **orphans;
 
 	fz_xml_doc *xfa;
+
+	pdf_journal *journal;
 };
 
 pdf_document *pdf_create_document(fz_context *ctx);
@@ -463,6 +472,17 @@ void pdf_graft_mapped_page(fz_context *ctx, pdf_graft_map *map, int page_to, pdf
 	contents buffer.
 */
 fz_device *pdf_page_write(fz_context *ctx, pdf_document *doc, fz_rect mediabox, pdf_obj **presources, fz_buffer **pcontents);
+
+/*
+	Create a pdf device. Rendering to the device creates
+	new pdf content. WARNING: this device is work in progress. It doesn't
+	currently support all rendering cases.
+
+	Note that contents must be a stream (dictionary) to be updated (or
+	a reference to a stream). Callers should take care to ensure that it
+	is not an array, and that is it not shared with other objects/pages.
+*/
+fz_device *pdf_new_pdf_device(fz_context *ctx, pdf_document *doc, fz_matrix topctm, pdf_obj *resources, fz_buffer *contents);
 
 /*
 	Create a pdf_obj within a document that
@@ -552,12 +572,14 @@ typedef struct
 	int do_sanitize; /* Sanitize content streams. */
 	int do_appearance; /* (Re)create appearance streams. */
 	int do_encrypt; /* Encryption method to use: keep, none, rc4-40, etc. */
+	int dont_regenerate_id; /* Don't regenerate ID if set (used for clean) */
 	int permissions; /* Document encryption permissions. */
 	char opwd_utf8[128]; /* Owner password. */
 	char upwd_utf8[128]; /* User password. */
+	int do_snapshot; /* Do not use directly. Use the snapshot functions. */
 } pdf_write_options;
 
-extern const pdf_write_options pdf_default_write_options;
+FZ_DATA extern const pdf_write_options pdf_default_write_options;
 
 /*
 	Parse option string into a pdf_write_options struct.
@@ -581,12 +603,26 @@ int pdf_has_unsaved_sigs(fz_context *ctx, pdf_document *doc);
 /*
 	Write out the document to an output stream with all changes finalised.
 */
-void pdf_write_document(fz_context *ctx, pdf_document *doc, fz_output *out, pdf_write_options *opts);
+void pdf_write_document(fz_context *ctx, pdf_document *doc, fz_output *out, const pdf_write_options *opts);
 
 /*
 	Write out the document to a file with all changes finalised.
 */
-void pdf_save_document(fz_context *ctx, pdf_document *doc, const char *filename, pdf_write_options *opts);
+void pdf_save_document(fz_context *ctx, pdf_document *doc, const char *filename, const pdf_write_options *opts);
+
+/*
+	Snapshot the document to a file. This does not cause the
+	incremental xref to be finalized, so the document in memory
+	remains (essentially) unchanged.
+*/
+void pdf_save_snapshot(fz_context *ctx, pdf_document *doc, const char *filename);
+
+/*
+	Snapshot the document to an output stream. This does not cause
+	the incremental xref to be finalized, so the document in memory
+	remains (essentially) unchanged.
+*/
+void pdf_write_snapshot(fz_context *ctx, pdf_document *doc, fz_output *out);
 
 char *pdf_format_write_options(fz_context *ctx, char *buffer, size_t buffer_len, const pdf_write_options *opts);
 
@@ -596,5 +632,27 @@ char *pdf_format_write_options(fz_context *ctx, char *buffer, size_t buffer_len,
 	impossible.
 */
 int pdf_can_be_saved_incrementally(fz_context *ctx, pdf_document *doc);
+
+/*
+	Write out the journal to an output stream.
+*/
+void pdf_write_journal(fz_context *ctx, pdf_document *doc, fz_output *out);
+
+/*
+	Write out the journal to a file.
+*/
+void pdf_save_journal(fz_context *ctx, pdf_document *doc, const char *filename);
+
+/*
+	Read a journal from a filename. Will do nothing if the journal
+	does not match. Will throw on a corrupted journal.
+*/
+void pdf_load_journal(fz_context *ctx, pdf_document *doc, const char *filename);
+
+/*
+	Read a journal from a stream. Will do nothing if the journal
+	does not match. Will throw on a corrupted journal.
+*/
+void pdf_read_journal(fz_context *ctx, pdf_document *doc, fz_stream *stm);
 
 #endif

@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -261,13 +261,12 @@ static void Handle_WM_NOTIFY(void* user, WndEvent* ev) {
         a.nm = (NMTVCUSTOMDRAW*)lp;
         HTREEITEM hItem = (HTREEITEM)a.nm->nmcd.dwItemSpec;
         // it can be 0 in CDDS_PREPAINT state
-        if (hItem) {
-            a.treeItem = w->GetTreeItemByHandle(hItem);
-            // TODO: log more info
-            SubmitCrashIf(!a.treeItem);
-            if (!a.treeItem) {
-                return;
-            }
+        a.treeItem = w->GetTreeItemByHandle(hItem);
+        // TODO: seeing this in crash reports because GetTVITEM() returns nullptr
+        // should log more info
+        // SubmitCrashIf(!a.treeItem);
+        if (!a.treeItem) {
+            return;
         }
         w->onTreeItemCustomDraw(&a);
         return;
@@ -502,6 +501,10 @@ bool TreeCtrl::Create() {
     if (!supportDragDrop) {
         dwStyle |= TVS_DISABLEDRAGDROP;
     }
+    if (fullRowSelect) {
+        dwStyle |= TVS_FULLROWSELECT;
+        dwStyle &= ~TVS_HASLINES;
+    }
 
     bool ok = WindowBase::Create();
     if (!ok) {
@@ -596,7 +599,6 @@ void TreeCtrl::CollapseAll() {
 
 void TreeCtrl::Clear() {
     treeModel = nullptr;
-    insertedItems.Reset();
 
     HWND hwnd = this->hwnd;
     ::SendMessageW(hwnd, WM_SETREDRAW, FALSE, 0);
@@ -640,25 +642,21 @@ TreeItem* TreeCtrl::GetItemAt(int x, int y) {
     return GetTreeItemByHandle(ht.hItem);
 }
 
-// TODO: speed up by storing the pointer as TVINSERTSTRUCTW.lParam
 HTREEITEM TreeCtrl::GetHandleByTreeItem(TreeItem* item) {
-    for (auto t : this->insertedItems) {
-        auto* i = std::get<0>(t);
-        if (i == item) {
-            return std::get<1>(t);
-        }
-    }
-    return nullptr;
+    HTREEITEM res = item->GetHandle();
+    return res;
 }
 
 TreeItem* TreeCtrl::GetTreeItemByHandle(HTREEITEM item) {
-    for (auto t : this->insertedItems) {
-        auto* i = std::get<1>(t);
-        if (i == item) {
-            return std::get<0>(t);
-        }
+    if (item == nullptr) {
+        return nullptr;
     }
-    return nullptr;
+    auto tvi = GetTVITEM(this, item);
+    if (!tvi) {
+        return nullptr;
+    }
+    TreeItem* res = reinterpret_cast<TreeItem*>(tvi->lParam);
+    return res;
 }
 
 void FillTVITEM(TVITEMEXW* tvitem, TreeItem* ti, bool withCheckboxes) {
@@ -702,6 +700,24 @@ static HTREEITEM insertItem(TreeCtrl* tree, HTREEITEM parent, TreeItem* ti) {
     return res;
 }
 
+// inserting in front is faster:
+// https://devblogs.microsoft.com/oldnewthing/20111125-00/?p=9033
+static HTREEITEM insertItemFront(TreeCtrl* tree, HTREEITEM parent, TreeItem* ti) {
+    TVINSERTSTRUCTW toInsert{};
+
+    toInsert.hParent = parent;
+    toInsert.hInsertAfter = TVI_FIRST;
+
+    TVITEMEXW* tvitem = &toInsert.itemex;
+    FillTVITEM(tvitem, ti, tree->withCheckboxes);
+    bool onDemand = tree->onTreeGetDispInfo != nullptr;
+    if (onDemand) {
+        tvitem->pszText = LPSTR_TEXTCALLBACK;
+    }
+    HTREEITEM res = TreeView_InsertItem(tree->hwnd, &toInsert);
+    return res;
+}
+
 bool TreeCtrl::UpdateItem(TreeItem* ti) {
     HTREEITEM ht = GetHandleByTreeItem(ti);
     CrashIf(!ht);
@@ -720,14 +736,42 @@ bool TreeCtrl::UpdateItem(TreeItem* ti) {
     return ok ? true : false;
 }
 
-static void PopulateTreeItem(TreeCtrl* tree, TreeItem* item, HTREEITEM parent) {
-    int n = item->ChildCount();
+// complicated because it inserts items backwards, as described in
+// https://devblogs.microsoft.com/oldnewthing/20111125-00/?p=9033
+void PopulateTreeItem(TreeCtrl* tree, TreeItem* parent, HTREEITEM hParent) {
+    TreeItem* tmp[256];
+    TreeItem** a = &tmp[0];
+    int n = parent->ChildCount();
+    if (n > dimof(tmp)) {
+        size_t nBytes = (size_t)n * sizeof(TreeItem*);
+        a = (TreeItem**)malloc(nBytes);
+        nBytes = (size_t)n * sizeof(HTREEITEM);
+        if (a == nullptr) {
+            free(a);
+            a = &tmp[0];
+            n = (int)dimof(tmp);
+        }
+    }
+    // ChildAt() is optimized for sequential access and we need to
+    // insert backwards, so gather the items in v first
     for (int i = 0; i < n; i++) {
-        auto* ti = item->ChildAt(i);
-        HTREEITEM h = insertItem(tree, parent, ti);
-        auto v = std::make_tuple(ti, h);
-        tree->insertedItems.Append(v);
-        PopulateTreeItem(tree, ti, h);
+        auto ti = parent->ChildAt(i);
+        CrashIf(ti == nullptr);
+        a[n - 1 - i] = ti;
+    }
+
+    for (int i = 0; i < n; i++) {
+        auto ti = a[i];
+        HTREEITEM h = insertItemFront(tree, hParent, ti);
+        ti->SetHandle(h);
+        // avoid recursing if not needed because we use a lot of stack space
+        if (ti->ChildCount() > 0) {
+            PopulateTreeItem(tree, ti, h);
+        }
+    }
+
+    if (a != &tmp[0]) {
+        free(a);
     }
 }
 
@@ -735,10 +779,9 @@ static void PopulateTree(TreeCtrl* tree, TreeModel* tm) {
     HTREEITEM parent = nullptr;
     int n = tm->RootCount();
     for (int i = 0; i < n; i++) {
-        auto* ti = tm->RootAt(i);
+        auto ti = tm->RootAt(i);
         HTREEITEM h = insertItem(tree, parent, ti);
-        auto v = std::make_tuple(ti, h);
-        tree->insertedItems.Append(v);
+        ti->SetHandle(h);
         PopulateTreeItem(tree, ti, h);
     }
 }
@@ -748,7 +791,6 @@ void TreeCtrl::SetTreeModel(TreeModel* tm) {
 
     SuspendRedraw();
 
-    insertedItems.Reset();
     TreeView_DeleteAllItems(hwnd);
 
     treeModel = tm;

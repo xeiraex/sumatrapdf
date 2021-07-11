@@ -5,7 +5,14 @@ EXPORTS
 
 ; Fitz exports
 
-	; new stuff
+	pdf_can_be_saved_incrementally
+	pdf_annot_page
+	pdf_drop_page_tree
+	pdf_annot_obj
+	pdf_annot_field_label
+	pdf_annot_field_flags
+	fz_new_pdfocr_writer_with_output
+	fz_new_pdfocr_writer
 	fz_is_point_inside_rect
 	fz_quad_from_rect
 	fz_do_try
@@ -60,7 +67,7 @@ EXPORTS
 	fz_set_warning_callback
 	fz_set_error_callback
 	fz_new_buffer_from_shared_data
-	pdf_update_appearance
+	pdf_update_annot
 	pdf_dict_put_drop
 	pdf_add_page
 	pdf_add_image
@@ -79,6 +86,7 @@ EXPORTS
 	drop_cached_fonts_for_ctx
 	pdf_doc_was_linearized
 	pdf_load_page_tree
+	pdf_annot_ap
 
 	fz_keep_bitmap
 	fz_drop_bitmap
@@ -642,7 +650,6 @@ EXPORTS
 	pdf_set_int
 	pdf_new_pdf_device
 	pdf_write_document
-	pdf_localise_page_resources
 	pdf_lookup_page_number
 	pdf_count_pages
 	pdf_lookup_page_obj

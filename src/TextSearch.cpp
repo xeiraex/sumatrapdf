@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -64,15 +64,15 @@ void TextSearch::SetText(const WCHAR* text) {
         for (end = text; isnoncjkwordchar(*end); end++) {
             ;
         }
-        anchor = str::DupN(text, end - text);
+        anchor = str::Dup(text, end - text);
     }
     // Adobe Reader also matches certain hard-to-type Unicode
     // characters when searching for easy-to-type homoglyphs
-    // cf. http://forums.fofou.org/sumatrapdf/topic?id=2432337
+    // cf. https://web.archive.org/web/20140201013717/http://forums.fofou.org:80/sumatrapdf/topic?id=2432337&comments=3
     else if (*text == '-' || *text == '\'' || *text == '"') {
         anchor = nullptr;
     } else {
-        anchor = str::DupN(text, 1);
+        anchor = str::Dup(text, 1);
     }
 
     if (str::Len(this->findText) >= INT_MAX) {

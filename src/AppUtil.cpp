@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -39,10 +39,9 @@ bool IsValidProgramVersion(const char* txt) {
     return true;
 }
 
-// extract the next (positive) number from the string *txt
-static unsigned int ExtractNextNumber(const WCHAR** txt) {
+static unsigned int ExtractNextNumber(const char** txt) {
     unsigned int val = 0;
-    const WCHAR* next = str::Parse(*txt, L"%u%?.", &val);
+    const char* next = str::Parse(*txt, "%u%?.", &val);
     *txt = next ? next : *txt + str::Len(*txt);
     return val;
 }
@@ -53,7 +52,7 @@ static unsigned int ExtractNextNumber(const WCHAR** txt) {
 //   0.9.3.900 is greater than 0.9.3
 //   1.09.300 is greater than 1.09.3 which is greater than 1.9.1
 //   1.2.0 is the same as 1.2
-int CompareVersion(const WCHAR* txt1, const WCHAR* txt2) {
+int CompareVersion(const char* txt1, const char* txt2) {
     while (*txt1 || *txt2) {
         unsigned int v1 = ExtractNextNumber(&txt1);
         unsigned int v2 = ExtractNextNumber(&txt2);
@@ -61,7 +60,6 @@ int CompareVersion(const WCHAR* txt1, const WCHAR* txt2) {
             return v1 - v2;
         }
     }
-
     return 0;
 }
 
@@ -105,7 +103,8 @@ bool IsUntrustedFile(const WCHAR* filePath, const WCHAR* fileURL) {
         }
     }
 
-    if (file::GetZoneIdentifier(filePath) >= URLZONE_INTERNET) {
+    auto filePathA = TempToUtf8(filePath);
+    if (file::GetZoneIdentifier(filePathA) >= URLZONE_INTERNET) {
         return true;
     }
 
@@ -113,7 +112,8 @@ bool IsUntrustedFile(const WCHAR* filePath, const WCHAR* fileURL) {
     AutoFreeWstr path(str::Dup(filePath));
     while (str::Len(path) > 2 && str::FindChar(path + 2, ':')) {
         *str::FindCharLast(path, ':') = '\0';
-        if (file::GetZoneIdentifier(path) >= URLZONE_INTERNET) {
+        auto pathA = TempToUtf8(path);
+        if (file::GetZoneIdentifier(pathA) >= URLZONE_INTERNET) {
             return true;
         }
     }

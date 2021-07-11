@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "BaseUtil.h"
@@ -291,7 +291,7 @@ HtmlElement* HtmlParser::ParseInPlace(std::span<u8> d, uint codepage) {
 }
 
 HtmlElement* HtmlParser::Parse(std::span<u8> d, uint codepage) {
-    char* s = str::DupN(d);
+    char* s = str::Dup(d);
     HtmlElement* root = ParseInPlace(str::ToSpan(s), codepage);
     freeHtml = true;
     return root;

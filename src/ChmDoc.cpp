@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -85,12 +85,12 @@ char* ChmDoc::ToUtf8(const u8* text, uint overrideCP) {
         return str::Dup(s + 3);
     }
     if (overrideCP) {
-        return (char*)strconv::ToMultiByte(s, overrideCP, CP_UTF8).data();
+        return (char*)strconv::ToMultiByteV(s, overrideCP, CP_UTF8).data();
     }
     if (CP_UTF8 == codepage) {
         return str::Dup(s);
     }
-    return (char*)strconv::ToMultiByte(s, codepage, CP_UTF8).data();
+    return (char*)strconv::ToMultiByteV(s, codepage, CP_UTF8).data();
 }
 
 WCHAR* ChmDoc::ToStr(const char* text) {
@@ -371,7 +371,7 @@ static bool VisitChmTocItem(EbookTocVisitor* visitor, HtmlElement* el, uint cp, 
         AutoFreeWstr attrName(el->GetAttribute("name"));
         AutoFreeWstr attrVal(el->GetAttribute("value"));
         if (attrName && attrVal && cp != CP_CHM_DEFAULT) {
-            AutoFree bytes(strconv::WstrToCodePage(attrVal, CP_CHM_DEFAULT));
+            AutoFree bytes(strconv::WstrToCodePageV(CP_CHM_DEFAULT, attrVal));
             attrVal.Set(strconv::FromCodePage(bytes.Get(), cp));
         }
         if (!attrName || !attrVal) {
@@ -419,7 +419,7 @@ static bool VisitChmIndexItem(EbookTocVisitor* visitor, HtmlElement* el, uint cp
         AutoFreeWstr attrName(el->GetAttribute("name"));
         AutoFreeWstr attrVal(el->GetAttribute("value"));
         if (attrName && attrVal && cp != CP_CHM_DEFAULT) {
-            AutoFree bytes(strconv::WstrToCodePage(attrVal, CP_CHM_DEFAULT));
+            AutoFree bytes(strconv::WstrToCodePageV(CP_CHM_DEFAULT, attrVal));
             attrVal.Set(strconv::FromCodePage(bytes.Get(), cp));
         }
         if (!attrName || !attrVal) {

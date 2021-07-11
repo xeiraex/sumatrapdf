@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 struct Controller;
@@ -76,7 +76,7 @@ struct Controller {
     virtual PageDestination* GetNamedDest(const WCHAR* name) = 0;
 
     // get display state (pageNo, zoom, scroll etc. of the document)
-    virtual void GetDisplayState(DisplayState* ds) = 0;
+    virtual void GetDisplayState(FileState* ds) = 0;
     // asynchronously calls saveThumbnail (fails silently)
     virtual void CreateThumbnail(Size size, const std::function<void(RenderedBitmap*)>& saveThumbnail) = 0;
 

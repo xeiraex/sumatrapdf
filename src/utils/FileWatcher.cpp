@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -59,9 +59,9 @@ struct OverlappedEx {
 };
 
 // info needed to detect that a file has changed
-struct FileState {
-    FILETIME time;
-    i64 size;
+struct FileWatcherState {
+    FILETIME time{0};
+    i64 size{0};
 };
 
 struct WatchedDir {
@@ -70,20 +70,20 @@ struct WatchedDir {
     HANDLE hDir{nullptr};
     bool startMonitoring{true};
     OverlappedEx overlapped;
-    char buf[8 * 1024];
+    char buf[8 * 1024]{0};
 };
 
 struct WatchedFile {
-    WatchedFile* next;
-    WatchedDir* watchedDir;
-    const WCHAR* filePath;
+    WatchedFile* next{nullptr};
+    WatchedDir* watchedDir{nullptr};
+    const WCHAR* filePath{nullptr};
     std::function<void()> onFileChangedCb;
 
     // if true, the file is on a network drive and we have
     // to check if it changed manually, by periodically checking
     // file state for changes
-    bool isManualCheck;
-    FileState fileState;
+    bool isManualCheck{false};
+    FileWatcherState fileState;
 };
 
 static HANDLE g_threadHandle = 0;
@@ -106,7 +106,7 @@ static void AwakeWatcherThread() {
     SetEvent(g_threadControlHandle);
 }
 
-static void GetFileState(const WCHAR* filePath, FileState* fs) {
+static void GetFileState(const WCHAR* filePath, FileWatcherState* fs) {
     // Note: in my testing on network drive that is mac volume mounted
     // via parallels, lastWriteTime is not updated. lastAccessTime is,
     // but it's also updated when the file is being read from (e.g.
@@ -117,7 +117,7 @@ static void GetFileState(const WCHAR* filePath, FileState* fs) {
     fs->size = file::GetSize(path.AsView());
 }
 
-static bool FileStateEq(FileState* fs1, FileState* fs2) {
+static bool FileStateEq(FileWatcherState* fs1, FileWatcherState* fs2) {
     if (0 != CompareFileTime(&fs1->time, &fs2->time)) {
         return false;
     }
@@ -127,8 +127,8 @@ static bool FileStateEq(FileState* fs1, FileState* fs2) {
     return true;
 }
 
-static bool FileStateChanged(const WCHAR* filePath, FileState* fs) {
-    FileState fsTmp;
+static bool FileStateChanged(const WCHAR* filePath, FileWatcherState* fs) {
+    FileWatcherState fsTmp;
 
     GetFileState(filePath, &fsTmp);
     if (FileStateEq(fs, &fsTmp)) {
@@ -200,7 +200,7 @@ static void CALLBACK ReadDirectoryChangesNotification(DWORD errCode, DWORD bytes
     // collect files that changed, removing duplicates
     WStrVec changedFiles;
     for (;;) {
-        AutoFreeWstr fileName(str::DupN(notify->FileName, notify->FileNameLength / sizeof(WCHAR)));
+        AutoFreeWstr fileName(str::Dup(notify->FileName, notify->FileNameLength / sizeof(WCHAR)));
         // files can get updated either by writing to them directly or
         // by writing to a .tmp file first and then moving that file in place
         // (the latter only yields a RENAMED action with the expected file name)
@@ -354,6 +354,11 @@ static void CALLBACK StopMonitoringDirAPC(ULONG_PTR arg) {
     SafeCloseHandle(&wd->hDir);
 }
 
+static void CALLBACK ExitMonitoringThread(ULONG_PTR arg) {
+    log("ExitMonitoringThraed\n");
+    ExitThread(0);
+}
+
 static WatchedDir* NewWatchedDir(const WCHAR* dirPath) {
     HANDLE hDir = CreateFile(dirPath, FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
                              nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr);
@@ -458,6 +463,7 @@ void FileWatcherWaitForShutdown() {
     // have any file watching subscriptions pending
     CrashIf(g_watchedFiles != nullptr);
     CrashIf(g_watchedDirs != nullptr);
+    QueueUserAPC(ExitMonitoringThread, g_threadHandle, (ULONG_PTR)0);
 
     // wait for ReadDirectoryChangesNotification() process actions triggered
     // in RemoveWatchedDirIfNotReferenced

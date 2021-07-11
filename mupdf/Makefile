@@ -49,6 +49,8 @@ ifneq ($(verbose),yes)
   QUIET_TAGS = @ echo "    TAGS $@" ;
   QUIET_WINDRES = @ echo "    WINDRES $@" ;
   QUIET_OBJCOPY = @ echo "    OBJCOPY $@" ;
+  QUIET_DLLTOOL = @ echo "    DLLTOOL $@" ;
+  QUIET_GENDEF = @ echo "    GENDEF $@" ;
 endif
 
 MKTGTDIR = mkdir -p $(dir $@)
@@ -62,6 +64,8 @@ LINK_CMD = $(QUIET_LINK) $(MKTGTDIR) ; $(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 TAGS_CMD = $(QUIET_TAGS) ctags -R --c-kinds=+p --exclude=platform/python --exclude=platform/c++
 WINDRES_CMD = $(QUIET_WINDRES) $(MKTGTDIR) ; $(WINDRES) $< $@
 OBJCOPY_CMD = $(QUIET_OBJCOPY) $(MKTGTDIR) ; $(LD) -r -b binary -z noexecstack -o $@ $<
+GENDEF_CMD = $(QUIET_GENDEF) gendef - $< > $@
+DLLTOOL_CMD = $(QUIET_DLLTOOL) dlltool -d $< -D $(notdir $(^:%.def=%.dll)) -l $@
 
 ifeq ($(shared),yes)
 LINK_CMD = $(QUIET_LINK) $(MKTGTDIR) ; $(CC) $(LDFLAGS) -o $@ \
@@ -82,6 +86,12 @@ $(OUT)/%.exe: %.c
 
 $(OUT)/%.$(SO):
 	$(LINK_CMD) $(LIB_LDFLAGS) $(THIRD_LIBS) $(LIBCRYPTO_LIBS)
+
+$(OUT)/%.def: $(OUT)/%.$(SO)
+	$(GENDEF_CMD)
+
+$(OUT)/%_$(SO).a: $(OUT)/%.def
+	$(DLLTOOL_CMD)
 
 $(OUT)/source/helpers/mu-threads/%.o : source/helpers/mu-threads/%.c
 	$(CC_CMD) $(WARNING_CFLAGS) $(LIB_CFLAGS) $(THREADING_CFLAGS)
@@ -109,11 +119,14 @@ ifeq ($(HAVE_OBJCOPY),yes)
 	$(CC_CMD) $(WARNING_CFLAGS) -Wdeclaration-after-statement -DHAVE_OBJCOPY $(LIB_CFLAGS) $(THIRD_CFLAGS)
 endif
 
+$(OUT)/source/fitz/memento.o : source/fitz/memento.c
+	$(CC_CMD) $(WARNING_CFLAGS) $(LIB_CFLAGS) $(THIRD_CFLAGS) -DMEMENTO_MUPDF_HACKS
+
 $(OUT)/source/%.o : source/%.c
 	$(CC_CMD) $(WARNING_CFLAGS) -Wdeclaration-after-statement $(LIB_CFLAGS) $(THIRD_CFLAGS)
 
 $(OUT)/source/%.o : source/%.cpp
-	$(CXX_CMD) $(WARNING_CFLAGS) $(LIB_CFLAGS) $(THIRD_CFLAGS)
+	$(CXX_CMD) $(WARNING_CFLAGS) $(LIB_CFLAGS) $(THIRD_CFLAGS) $(TESSERACT_BUILD_CFLAGS)
 
 $(OUT)/platform/%.o : platform/%.c
 	$(CC_CMD) $(WARNING_CFLAGS)
@@ -138,6 +151,7 @@ MUPDF_SRC += $(sort $(wildcard source/pdf/*.c))
 MUPDF_SRC += $(sort $(wildcard source/xps/*.c))
 MUPDF_SRC += $(sort $(wildcard source/svg/*.c))
 MUPDF_SRC += $(sort $(wildcard source/html/*.c))
+MUPDF_SRC += $(sort $(wildcard source/reflow/*.c))
 MUPDF_SRC += $(sort $(wildcard source/cbz/*.c))
 
 MUPDF_OBJ := $(MUPDF_SRC:%.c=$(OUT)/%.o)
@@ -146,7 +160,6 @@ MUPDF_OBJ := $(MUPDF_OBJ:%.cpp=$(OUT)/%.o)
 THREAD_SRC := source/helpers/mu-threads/mu-threads.c
 THREAD_OBJ := $(THREAD_SRC:%.c=$(OUT)/%.o)
 
-PKCS7_SRC := source/helpers/pkcs7/pkcs7-check.c
 PKCS7_SRC += source/helpers/pkcs7/pkcs7-openssl.c
 PKCS7_OBJ := $(PKCS7_SRC:%.c=$(OUT)/%.o)
 
@@ -218,7 +231,16 @@ generate: source/html/css-properties.h
 
 ifeq ($(shared),yes)
 MUPDF_LIB = $(OUT)/libmupdf.$(SO)
+ifeq ($(OS),MINGW)
+MUPDF_LIB_IMPORT = $(OUT)/libmupdf_$(SO).a
+LIBS_TO_INSTALL_IN_BIN = $(MUPDF_LIB)
+LIBS_TO_INSTALL_IN_LIB = $(MUPDF_LIB_IMPORT)
+else
+LIBS_TO_INSTALL_IN_LIB = $(MUPDF_LIB)
+endif
+ifneq ($(USE_SYSTEM_GLUT),yes)
 THIRD_GLUT_LIB = $(OUT)/libmupdf-glut.a
+endif
 THREAD_LIB = $(OUT)/libmupdf-threads.a
 PKCS7_LIB = $(OUT)/libmupdf-pkcs7.a
 
@@ -228,8 +250,11 @@ $(THREAD_LIB) : $(THREAD_OBJ)
 $(PKCS7_LIB) : $(PKCS7_OBJ)
 else
 MUPDF_LIB = $(OUT)/libmupdf.a
+LIBS_TO_INSTALL_IN_LIB = $(MUPDF_LIB) $(THIRD_LIB)
 THIRD_LIB = $(OUT)/libmupdf-third.a
+ifneq ($(USE_SYSTEM_GLUT),yes)
 THIRD_GLUT_LIB = $(OUT)/libmupdf-glut.a
+endif
 THREAD_LIB = $(OUT)/libmupdf-threads.a
 PKCS7_LIB = $(OUT)/libmupdf-pkcs7.a
 
@@ -244,8 +269,6 @@ $(MUPDF_LIB) : $(MUPDF_OBJ)
 $(THIRD_LIB) : $(THIRD_OBJ)
 $(THREAD_LIB) : $(THREAD_OBJ)
 $(PKCS7_LIB) : $(PKCS7_OBJ)
-
-INSTALL_LIBS := $(MUPDF_LIB) $(THIRD_LIB)
 
 # --- Main tools and viewers ---
 
@@ -366,7 +389,7 @@ docdir ?= $(prefix)/share/doc/mupdf
 
 third: $(THIRD_LIB)
 extra-libs: $(THIRD_GLUT_LIB)
-libs: $(INSTALL_LIBS)
+libs: $(LIBS_TO_INSTALL_IN_BIN) $(LIBS_TO_INSTALL_IN_LIB)
 tools: $(TOOL_APPS)
 apps: $(TOOL_APPS) $(VIEW_APPS)
 
@@ -378,11 +401,13 @@ install: libs apps
 	install -m 644 include/mupdf/fitz/*.h $(DESTDIR)$(incdir)/mupdf/fitz
 	install -m 644 include/mupdf/pdf/*.h $(DESTDIR)$(incdir)/mupdf/pdf
 
+ifneq ($(LIBS_TO_INSTALL_IN_LIB),)
 	install -d $(DESTDIR)$(libdir)
-	install -m 644 $(INSTALL_LIBS) $(DESTDIR)$(libdir)
+	install -m 644 $(LIBS_TO_INSTALL_IN_LIB) $(DESTDIR)$(libdir)
+endif
 
 	install -d $(DESTDIR)$(bindir)
-	install -m 755 $(TOOL_APPS) $(VIEW_APPS) $(DESTDIR)$(bindir)
+	install -m 755 $(LIBS_TO_INSTALL_IN_BIN) $(TOOL_APPS) $(VIEW_APPS) $(DESTDIR)$(bindir)
 
 	install -d $(DESTDIR)$(mandir)/man1
 	install -m 644 docs/man/*.1 $(DESTDIR)$(mandir)/man1
@@ -432,7 +457,11 @@ all: libs apps
 clean:
 	rm -rf $(OUT)
 nuke:
-	rm -rf build/* generated
+	rm -rf build/*
+	rm -rf generated/resources/fonts/droid
+	rm -rf generated/resources/fonts/han
+	rm -rf generated/resources/fonts/noto
+	rm -rf generated/resources/fonts/sil
 
 release:
 	$(MAKE) build=release

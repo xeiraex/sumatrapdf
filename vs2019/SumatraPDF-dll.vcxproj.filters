@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="docs">
+      <UniqueIdentifier>{CECA957C-BA01-970D-63EE-7C104F04130F}</UniqueIdentifier>
+    </Filter>
     <Filter Include="ext">
       <UniqueIdentifier>{7670880B-E279-887C-6BF5-9E7CD7FD937C}</UniqueIdentifier>
     </Filter>
@@ -21,6 +24,12 @@
     </Filter>
     <Filter Include="src\uia">
       <UniqueIdentifier>{1B3F30A9-871E-AF44-9036-3A1BFC9415A6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\utils">
+      <UniqueIdentifier>{6DAA42B6-D914-F72C-2253-A8D28EFCD481}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\utils\tests">
+      <UniqueIdentifier>{0FF3B448-7B7E-220D-848F-A501F0997E0D}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -111,9 +120,6 @@
     <ClInclude Include="..\src\PagesLayoutDef.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\ParseBKM.h">
-      <Filter>src</Filter>
-    </ClInclude>
     <ClInclude Include="..\src\PdfSync.h">
       <Filter>src</Filter>
     </ClInclude>
@@ -172,12 +178,6 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\Theme.h">
-      <Filter>src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\TocEditTitle.h">
-      <Filter>src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\TocEditor.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\Toolbar.h">
@@ -257,6 +257,9 @@
     </ClInclude>
     <ClInclude Include="..\src\uia\TextRange.h">
       <Filter>src\uia</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\utils\UtAssert.h">
+      <Filter>src\utils</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -344,6 +347,9 @@
     <ClCompile Include="..\src\Installer.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\MemLeakDetect.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\Menu.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -357,9 +363,6 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\PagesLayoutDef.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\ParseBKM.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\PdfSync.cpp">
@@ -428,12 +431,6 @@
     <ClCompile Include="..\src\Theme.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\TocEditTitle.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\TocEditor.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\Toolbar.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -441,6 +438,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Translations.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Translations2.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Uninstaller.cpp">
@@ -503,9 +503,6 @@
     <ClCompile Include="..\src\testcode\TestLayout.cpp">
       <Filter>src\testcode</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\testcode\TestLice.cpp">
-      <Filter>src\testcode</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\testcode\TestTab.cpp">
       <Filter>src\testcode</Filter>
     </ClCompile>
@@ -524,8 +521,68 @@
     <ClCompile Include="..\src\uia\TextRange.cpp">
       <Filter>src\uia</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\utils\UtAssert.cpp">
+      <Filter>src\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\BaseUtil_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\ByteOrderDecoder_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\CmdLineParser_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\CryptoUtil_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\CssParser_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\Dict_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\FileUtil_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\HtmlPrettyPrint_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\HtmlPullParser_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\JsonParser_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\SettingsUtil_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\SimpleLog_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\SquareTreeParser_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\StrFormat_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\StrUtil_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\TrivialHtmlParser_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\Vec_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utils\tests\WinUtil_ut.cpp">
+      <Filter>src\utils\tests</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\docs\releasenotes.txt">
+      <Filter>docs</Filter>
+    </None>
     <None Include="..\src\log.txt">
       <Filter>src</Filter>
     </None>

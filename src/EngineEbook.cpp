@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 // engines which render flowed ebook formats into fixed pages through the EngineBase API
@@ -431,7 +431,7 @@ PageElement* EngineEbook::CreatePageLink(DrawInstr* link, Rect rect, int pageNo)
 
     DrawInstr* baseAnchor = baseAnchors.at(pageNo - 1);
     if (baseAnchor) {
-        AutoFree basePath(str::DupN(baseAnchor->str.s, baseAnchor->str.len));
+        AutoFree basePath(str::Dup(baseAnchor->str.s, baseAnchor->str.len));
         AutoFree relPath(ResolveHtmlEntities(link->str.s, link->str.len));
         AutoFree absPath(NormalizeURL(relPath, basePath));
         url.Set(strconv::Utf8ToWstr(absPath.Get()));
@@ -759,7 +759,7 @@ bool EngineEpub::FinishLoading() {
     args.SetFontName(GetDefaultFontName());
     args.fontSize = GetDefaultFontSize();
     args.textAllocator = &allocator;
-    args.textRenderMethod = mui::TextRenderMethodGdiplusQuick;
+    args.textRenderMethod = mui::TextRenderMethod::GdiplusQuick;
 
     pages = EpubFormatter(&args, doc).FormatAllPages(false);
 
@@ -901,7 +901,7 @@ bool EngineFb2::FinishLoading() {
     args.SetFontName(GetDefaultFontName());
     args.fontSize = GetDefaultFontSize();
     args.textAllocator = &allocator;
-    args.textRenderMethod = mui::TextRenderMethodGdiplusQuick;
+    args.textRenderMethod = mui::TextRenderMethod::GdiplusQuick;
 
     if (doc->IsZipped()) {
         defaultFileExt = L".fb2z";
@@ -1020,7 +1020,7 @@ bool EngineMobi::FinishLoading() {
     args.SetFontName(GetDefaultFontName());
     args.fontSize = GetDefaultFontSize();
     args.textAllocator = &allocator;
-    args.textRenderMethod = mui::TextRenderMethodGdiplusQuick;
+    args.textRenderMethod = mui::TextRenderMethod::GdiplusQuick;
 
     pages = MobiFormatter(&args, doc).FormatAllPages();
     // must set pageCount before ExtractPageAnchors
@@ -1158,7 +1158,7 @@ bool EnginePdb::Load(const WCHAR* fileName) {
     args.SetFontName(GetDefaultFontName());
     args.fontSize = GetDefaultFontSize();
     args.textAllocator = &allocator;
-    args.textRenderMethod = mui::TextRenderMethodGdiplusQuick;
+    args.textRenderMethod = mui::TextRenderMethod::GdiplusQuick;
 
     pages = HtmlFormatter(&args).FormatAllPages();
     // must set pageCount before ExtractPageAnchors
@@ -1268,7 +1268,7 @@ void ChmFormatter::HandleTagImg(HtmlToken* t) {
     bool needAlt = true;
     AttrInfo* attr = t->GetAttrByName("src");
     if (attr) {
-        AutoFree src(str::DupN(attr->val, attr->valLen));
+        AutoFree src(str::Dup(attr->val, attr->valLen));
         url::DecodeInPlace(src);
         ImageData* img = chmDoc->GetImageData(src, pagePath);
         needAlt = !img || !EmitImage(img);
@@ -1286,7 +1286,7 @@ void ChmFormatter::HandleTagPagebreak(HtmlToken* t) {
     if (attr) {
         Gdiplus::RectF bbox(0, currY, pageDx, 0);
         currPage->instructions.Append(DrawInstr::Anchor(attr->val, attr->valLen, bbox));
-        pagePath.Set(str::DupN(attr->val, attr->valLen));
+        pagePath.Set(str::Dup(attr->val, attr->valLen));
         // reset CSS style rules for the new document
         styleRules.Reset();
     }
@@ -1310,7 +1310,7 @@ void ChmFormatter::HandleTagLink(HtmlToken* t) {
         return;
     }
 
-    AutoFree src(str::DupN(attr->val, attr->valLen));
+    AutoFree src(str::Dup(attr->val, attr->valLen));
     url::DecodeInPlace(src);
     AutoFree data = chmDoc->GetFileData(src, pagePath);
     if (data.data) {
@@ -1480,7 +1480,7 @@ bool EngineChm::Load(const WCHAR* fileName) {
     args.SetFontName(GetDefaultFontName());
     args.fontSize = GetDefaultFontSize();
     args.textAllocator = &allocator;
-    args.textRenderMethod = mui::TextRenderMethodGdiplusQuick;
+    args.textRenderMethod = mui::TextRenderMethod::GdiplusQuick;
 
     pages = ChmFormatter(&args, dataCache).FormatAllPages(false);
     // must set pageCount before ExtractPageAnchors
@@ -1544,8 +1544,8 @@ PageElement* EngineChm::CreatePageLink(DrawInstr* link, Rect rect, int pageNo) {
     }
 
     DrawInstr* baseAnchor = baseAnchors.at(pageNo - 1);
-    AutoFree basePath(str::DupN(baseAnchor->str.s, baseAnchor->str.len));
-    AutoFree url(str::DupN(link->str.s, link->str.len));
+    AutoFree basePath(str::Dup(baseAnchor->str.s, baseAnchor->str.len));
+    AutoFree url(str::Dup(link->str.s, link->str.len));
     url.Set(NormalizeURL(url, basePath));
     if (!doc->HasData(url)) {
         return nullptr;
@@ -1618,7 +1618,7 @@ bool EngineHtml::Load(const WCHAR* fileName) {
     args.SetFontName(GetDefaultFontName());
     args.fontSize = GetDefaultFontSize();
     args.textAllocator = &allocator;
-    args.textRenderMethod = mui::TextRenderMethodGdiplus;
+    args.textRenderMethod = mui::TextRenderMethod::Gdiplus;
 
     pages = HtmlFileFormatter(&args, doc).FormatAllPages(false);
     // must set pageCount before ExtractPageAnchors
@@ -1634,7 +1634,7 @@ static PageDestination* newRemoteHtmlDest(const WCHAR* relativeURL) {
     auto* res = new PageDestination();
     const WCHAR* id = str::FindChar(relativeURL, '#');
     if (id) {
-        res->value = str::DupN(relativeURL, id - relativeURL);
+        res->value = str::Dup(relativeURL, id - relativeURL);
         res->name = str::Dup(id);
     } else {
         res->value = str::Dup(relativeURL);
@@ -1733,7 +1733,7 @@ bool EngineTxt::Load(const WCHAR* fileName) {
     args.SetFontName(GetDefaultFontName());
     args.fontSize = GetDefaultFontSize();
     args.textAllocator = &allocator;
-    args.textRenderMethod = mui::TextRenderMethodGdiplus;
+    args.textRenderMethod = mui::TextRenderMethod::Gdiplus;
 
     pages = TxtFormatter(&args).FormatAllPages(false);
     // must set pageCount before ExtractPageAnchors
@@ -1768,4 +1768,8 @@ EngineBase* EngineTxt::CreateFromFile(const WCHAR* fileName) {
 
 EngineBase* CreateTxtEngineFromFile(const WCHAR* fileName) {
     return EngineTxt::CreateFromFile(fileName);
+}
+
+void EngineEbookCleanup() {
+    gDefaultFontName.Reset();
 }

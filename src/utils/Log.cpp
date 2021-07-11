@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -83,7 +83,6 @@ void StartLogToFile(const char* path) {
     remove(path);
 }
 
-#if OS_WIN
 void log(const WCHAR* s) {
     if (!s) {
         return;
@@ -106,4 +105,3 @@ void logf(const WCHAR* fmt, ...) {
     log(s);
     va_end(args);
 }
-#endif

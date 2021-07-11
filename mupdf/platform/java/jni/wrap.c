@@ -422,7 +422,7 @@ static inline jobject to_PDFWidget_safe(fz_context *ctx, JNIEnv *env, pdf_widget
 	fz_try(ctx)
 	{
 		int fieldType = pdf_widget_type(ctx, widget);
-		int fieldFlags = pdf_field_flags(ctx, widget->obj);
+		int fieldFlags = pdf_field_flags(ctx, pdf_annot_obj(ctx, widget));
 		(*env)->SetIntField(env, jwidget, fid_PDFWidget_fieldType, fieldType);
 		(*env)->SetIntField(env, jwidget, fid_PDFWidget_fieldFlags, fieldFlags);
 		if (fieldType == PDF_WIDGET_TYPE_TEXT)
@@ -477,19 +477,6 @@ static inline jobject to_Document_safe_own(fz_context *ctx, JNIEnv *env, fz_docu
 	return obj;
 }
 
-static inline jobject to_Device_safe_own(fz_context *ctx, JNIEnv *env, fz_device *device)
-{
-	jobject jdev;
-
-	if (!ctx || !device) return NULL;
-
-	jdev = (*env)->NewObject(env, cls_DisplayList, mid_Device_init, jlong_cast(device));
-	if (!jdev)
-		fz_drop_device(ctx, device);
-
-	return jdev;
-}
-
 static inline jobject to_DisplayList_safe_own(fz_context *ctx, JNIEnv *env, fz_display_list *list)
 {
 	jobject jlist;
@@ -501,6 +488,19 @@ static inline jobject to_DisplayList_safe_own(fz_context *ctx, JNIEnv *env, fz_d
 		fz_drop_display_list(ctx, list);
 
 	return jlist;
+}
+
+static inline jobject to_NativeDevice_safe_own(fz_context *ctx, JNIEnv *env, fz_device *device)
+{
+	jobject jdev;
+
+	if (!ctx || !device) return NULL;
+
+	jdev = (*env)->NewObject(env, cls_NativeDevice, mid_NativeDevice_init, jlong_cast(device));
+	if (!jdev)
+		fz_drop_device(ctx, device);
+
+	return jdev;
 }
 
 static inline jobject to_Page_safe_own(fz_context *ctx, JNIEnv *env, fz_page *page)

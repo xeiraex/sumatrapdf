@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 struct TreeCtrl;
@@ -106,8 +106,12 @@ typedef std::function<void(TreeItemDraggeddEvent*)> TreeItemDraggedHandler;
 */
 
 struct TreeCtrl : WindowBase {
-    // creation parameters. must be set before CreateTreeCtrl() call
+    // creation parameters. must be set before Create() call
     bool withCheckboxes{false};
+
+    // sets TVS_FULLROWSELECT style
+    // https://docs.microsoft.com/en-us/windows/win32/controls/tree-view-control-window-styles
+    bool fullRowSelect{false};
 
     // set before Create() to enable drag&drop
     bool supportDragDrop{false};
@@ -155,10 +159,6 @@ struct TreeCtrl : WindowBase {
 
     // private
     TVITEMW item{};
-
-    // TreeItem* -> HTREEITEM mapping so that we can
-    // find HTREEITEM from TreeItem*
-    Vec<std::tuple<TreeItem*, HTREEITEM>> insertedItems;
 
     TreeCtrl(HWND parent);
     ~TreeCtrl();

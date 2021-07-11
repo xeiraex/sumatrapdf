@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 // note: include BaseUtil.h instead of including directly
@@ -144,3 +144,5 @@ RECT ToRECT(const RectF r);
 Rect ToRect(const RectF r);
 Gdiplus::Rect ToGdipRect(const RectF r);
 Gdiplus::RectF ToGdipRectF(const RectF r);
+
+int NormalizeRotation(int rotation);

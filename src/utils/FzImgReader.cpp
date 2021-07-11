@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #pragma warning(disable : 4611) // interaction between '_setjmp' and C++ object destruction is non-portable
@@ -24,12 +24,14 @@ static Gdiplus::Bitmap* ImageFromJpegData(fz_context* ctx, const u8* data, int l
     int w = 0, h = 0, xres = 0, yres = 0;
     fz_colorspace* cs = nullptr;
     fz_stream* stm = nullptr;
+    uint8_t orient = 0;
 
     fz_var(cs);
     fz_var(stm);
+    fz_var(orient);
 
     fz_try(ctx) {
-        fz_load_jpeg_info(ctx, data, len, &w, &h, &xres, &yres, &cs);
+        fz_load_jpeg_info(ctx, data, len, &w, &h, &xres, &yres, &cs, &orient);
         stm = fz_open_memory(ctx, data, len);
         stm = fz_open_dctd(ctx, stm, -1, 0, nullptr);
     }
@@ -38,11 +40,10 @@ static Gdiplus::Bitmap* ImageFromJpegData(fz_context* ctx, const u8* data, int l
         cs = nullptr;
     }
 
-    Gdiplus::PixelFormat fmt = fz_device_rgb(ctx) == cs
-                                   ? PixelFormat24bppRGB
-                                   : fz_device_gray(ctx) == cs
-                                         ? PixelFormat24bppRGB
-                                         : fz_device_cmyk(ctx) == cs ? PixelFormat32bppCMYK : PixelFormatUndefined;
+    Gdiplus::PixelFormat fmt = fz_device_rgb(ctx) == cs    ? PixelFormat24bppRGB
+                               : fz_device_gray(ctx) == cs ? PixelFormat24bppRGB
+                               : fz_device_cmyk(ctx) == cs ? PixelFormat32bppCMYK
+                                                           : PixelFormatUndefined;
     if (PixelFormatUndefined == fmt || w <= 0 || h <= 0 || !cs) {
         fz_drop_stream(ctx, stm);
         fz_drop_colorspace(ctx, cs);

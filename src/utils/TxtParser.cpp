@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "BaseUtil.h"
@@ -96,14 +96,14 @@ char* TxtNode::KeyDup() const {
     if (!keyStart) {
         return nullptr;
     }
-    return str::DupN(keyStart, KeyLen());
+    return str::Dup(keyStart, KeyLen());
 }
 
 char* TxtNode::ValDup() const {
     if (!valStart) {
         return nullptr;
     }
-    return str::DupN(valStart, ValLen());
+    return str::Dup(valStart, ValLen());
 }
 
 TxtNode* TxtParser::AllocTxtNode(TxtNode::Type nodeType) {
@@ -125,7 +125,7 @@ TxtNode* TxtParser::AllocTxtNodeFromToken(const Token& tok, TxtNode::Type nodeTy
 }
 
 void TxtParser::SetToParse(const std::string_view& str) {
-    data = strconv::UnknownToUtf8(str);
+    data = strconv::UnknownToUtf8V(str);
     char* d = (char*)data.Get();
     size_t dLen = data.size();
     size_t n = str::NormalizeNewlinesInPlace(d, d + dLen);

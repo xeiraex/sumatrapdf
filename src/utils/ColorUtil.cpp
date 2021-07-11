@@ -1,29 +1,23 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
 #include "utils/WinUtil.h"
-#include "utils/ColorUtil.h"
 
-// #define RGB(r,g,b)          ((COLORREF)(((BYTE)(r)|((WORD)((BYTE)(g))<<8))|(((DWORD)(BYTE)(b))<<16)))
-
-COLORREF MkRgb(u8 r, u8 g, u8 b) {
-    return RGB(r, g, b);
+COLORREF MkColor(u8 r, u8 g, u8 b, u8 a) {
+    COLORREF r2 = r;
+    COLORREF g2 = (COLORREF)g << 8;
+    COLORREF b2 = (COLORREF)b << 16;
+    COLORREF a2 = (COLORREF)a << 24;
+    return r2 | g2 | b2 | a2;
 }
 
 COLORREF MkGray(u8 x) {
-    return MkRgb(x, x, x);
+    return MkColor(x, x, x);
 }
 
-COLORREF MkRgba(u8 r, u8 g, u8 b, u8 a) {
-    COLORREF col = RGB(r, g, b);
-    COLORREF alpha = (COLORREF)a;
-    alpha = alpha << 24;
-    col = col | alpha;
-    return col;
-}
-
-void UnpackRgba(COLORREF c, u8& r, u8& g, u8& b, u8& a) {
+// format: abgr
+void UnpackColor(COLORREF c, u8& r, u8& g, u8& b, u8& a) {
     r = (u8)(c & 0xff);
     c = c >> 8;
     g = (u8)(c & 0xff);
@@ -33,7 +27,8 @@ void UnpackRgba(COLORREF c, u8& r, u8& g, u8& b, u8& a) {
     a = (u8)(c & 0xff);
 }
 
-void UnpackRgb(COLORREF c, u8& r, u8& g, u8& b) {
+// format: bgr
+void UnpackColor(COLORREF c, u8& r, u8& g, u8& b) {
     r = (u8)(c & 0xff);
     c = c >> 8;
     g = (u8)(c & 0xff);
@@ -54,7 +49,7 @@ static Gdiplus::Color Unblend(PageAnnotation::Color c, BYTE alpha) {
 // TODO: not sure if that's the exact translation of the original (above)
 Gdiplus::Color Unblend(COLORREF c, u8 alpha) {
     u8 r, g, b, a;
-    UnpackRgba(c, r, g, b, a);
+    UnpackColor(c, r, g, b, a);
     u8 ralpha = (BYTE)(alpha * a / 255.f);
     float falpha = ((float)alpha * (float)a / 255.f);
     float tmp = 255.0f / (falpha + 0.5f);
@@ -66,7 +61,7 @@ Gdiplus::Color Unblend(COLORREF c, u8 alpha) {
 
 Gdiplus::Color GdiRgbFromCOLORREF(COLORREF c) {
     u8 r, g, b;
-    UnpackRgb(c, r, g, b);
+    UnpackColor(c, r, g, b);
     return Gdiplus::Color(r, g, b);
 }
 
@@ -108,18 +103,9 @@ COLORREF ColorSetAlpha(COLORREF c, u8 alpha) {
     return colorSetHelper(c, alpha, 3);
 }
 
-// TODO: remove use of SerializeColorRgb() and replace with SerializeColor
-void SerializeColorRgb(COLORREF c, str::Str& out) {
-    u8 r, g, b;
-    UnpackRgb(c, r, g, b);
-    char* s = str::Format("#%02x%02x%02x", r, g, b);
-    out.Append(s);
-    free(s);
-}
-
 void SerializeColor(COLORREF c, str::Str& out) {
     u8 r, g, b, a;
-    UnpackRgba(c, r, g, b, a);
+    UnpackColor(c, r, g, b, a);
     char* s = nullptr;
     if (a > 0) {
         s = str::Format("#%02x%02x%02x%02x", a, r, g, b);
@@ -161,12 +147,12 @@ bool ParseColor(COLORREF* destColor, std::string_view sv) {
     unsigned int r, g, b, a;
     bool ok = str::Parse(txt, n, "%2x%2x%2x%2x", &a, &r, &g, &b);
     if (ok) {
-        *destColor = MkRgba((u8)r, (u8)g, (u8)b, (u8)a);
+        *destColor = MkColor((u8)r, (u8)g, (u8)b, (u8)a);
         return true;
     }
     ok = str::Parse(txt, n, "%2x%2x%2x", &r, &g, &b);
     if (ok) {
-        *destColor = MkRgb((u8)r, (u8)g, (u8)b);
+        *destColor = MkColor((u8)r, (u8)g, (u8)b);
     }
     return ok;
 }
@@ -179,7 +165,7 @@ bool ParseColor(COLORREF* destColor, const char* txt) {
 
 COLORREF AdjustLightness(COLORREF c, float factor) {
     u8 R, G, B;
-    UnpackRgb(c, R, G, B);
+    UnpackColor(c, R, G, B);
     // cf. http://en.wikipedia.org/wiki/HSV_color_space#Hue_and_chroma
     BYTE M = std::max(std::max(R, G), B), m = std::min(std::min(R, G), B);
     if (M == m) {
@@ -218,12 +204,11 @@ COLORREF AdjustLightness2(COLORREF c, float units) {
 // cf. http://en.wikipedia.org/wiki/HSV_color_space#Lightness
 float GetLightness(COLORREF c) {
     u8 R, G, B;
-    UnpackRgb(c, R, G, B);
+    UnpackColor(c, R, G, B);
     BYTE M = std::max(std::max(R, G), B), m = std::min(std::min(R, G), B);
     return (M + m) / 2.0f;
 }
 
-#if OS_WIN
 u8 GetRed(COLORREF rgb) {
     rgb = rgb & 0xff;
     return (u8)rgb;
@@ -243,4 +228,3 @@ u8 GetAlpha(COLORREF rgb) {
     rgb = (rgb >> 24) & 0xff;
     return (u8)rgb;
 }
-#endif

@@ -86,10 +86,12 @@ struct ui
 	const void *hot, *active, *focus;
 	int last_cursor, cursor;
 
+	float scale;
 	int fontsize;
 	int baseline;
 	int lineheight;
 	int gridsize;
+	int padsize;
 
 	struct layout *layout;
 	fz_irect *cavity;
@@ -104,6 +106,7 @@ struct ui
 
 extern struct ui ui;
 
+void ui_init_dpi(float override_ui_scale);
 void ui_init(int w, int h, const char *title);
 void ui_quit(void);
 void ui_invalidate(void);
@@ -258,6 +261,8 @@ extern int reloadrequested;
 extern char *search_needle;
 extern int search_hit_count;
 extern fz_quad search_hit_quads[];
+extern int page_contents_changed;
+extern int page_annots_changed;
 
 int search_has_results(void);
 enum {
@@ -272,7 +277,6 @@ void do_annotate_canvas(fz_irect canvas_area);
 void do_redact_panel(void);
 void do_widget_canvas(fz_irect canvas_area);
 void load_page(void);
-void render_page(void);
 void update_title(void);
 void reload_document(void);
 void reload(void);

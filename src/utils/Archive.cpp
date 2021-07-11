@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -18,13 +18,11 @@ extern "C" {
 // 3 is for absolute worst case of WCHAR* where last char was partially written
 #define ZERO_PADDING_COUNT 3
 
-#if OS_WIN
 FILETIME MultiFormatArchive::FileInfo::GetWinFileTime() const {
     FILETIME ft = {(DWORD)-1, (DWORD)-1};
     LocalFileTimeToFileTime((FILETIME*)&fileTime, &ft);
     return ft;
 }
-#endif
 
 MultiFormatArchive::MultiFormatArchive(archive_opener_t opener, MultiFormatArchive::Format format)
     : format(format), opener_(opener) {
@@ -62,7 +60,7 @@ bool MultiFormatArchive::Open(ar_stream* data, const char* archivePath) {
         i->fileSizeUncompressed = ar_entry_get_size(ar_);
         i->filePos = ar_entry_get_offset(ar_);
         i->fileTime = ar_entry_get_filetime(ar_);
-        i->name = Allocator::AllocString(&allocator_, name);
+        i->name = str::Dup(&allocator_, name);
         fileInfos_.Append(i);
 
         fileId++;
@@ -92,12 +90,10 @@ size_t MultiFormatArchive::GetFileId(const char* fileName) {
     return getFileIdByName(fileInfos_, fileName);
 }
 
-#if OS_WIN
 std::span<u8> MultiFormatArchive::GetFileDataByName(const WCHAR* fileName) {
     AutoFree fileNameUtf8 = strconv::WstrToUtf8(fileName);
     return GetFileDataByName(fileNameUtf8);
 }
-#endif
 
 std::span<u8> MultiFormatArchive::GetFileDataByName(const char* fileName) {
     size_t fileId = getFileIdByName(fileInfos_, fileName);
@@ -174,7 +170,6 @@ static MultiFormatArchive* open(MultiFormatArchive* archive, const char* path) {
     return archive;
 }
 
-#if OS_WIN
 static MultiFormatArchive* open(MultiFormatArchive* archive, const WCHAR* path) {
     AutoFree pathUtf = strconv::WstrToUtf8(path);
     bool ok = archive->Open(ar_open_file_w(path), pathUtf);
@@ -193,7 +188,6 @@ static MultiFormatArchive* open(MultiFormatArchive* archive, IStream* stream) {
     }
     return archive;
 }
-#endif
 
 MultiFormatArchive* OpenZipArchive(const char* path, bool deflatedOnly) {
     auto opener = ar_open_zip_archive_any;
@@ -219,7 +213,6 @@ MultiFormatArchive* OpenRarArchive(const char* path) {
     return open(archive, path);
 }
 
-#if OS_WIN
 MultiFormatArchive* OpenZipArchive(const WCHAR* path, bool deflatedOnly) {
     auto opener = ar_open_zip_archive_any;
     if (deflatedOnly) {
@@ -243,9 +236,7 @@ MultiFormatArchive* OpenRarArchive(const WCHAR* path) {
     auto* archive = new MultiFormatArchive(ar_open_rar_archive, MultiFormatArchive::Format::Rar);
     return open(archive, path);
 }
-#endif
 
-#if OS_WIN
 MultiFormatArchive* OpenZipArchive(IStream* stream, bool deflatedOnly) {
     auto opener = ar_open_zip_archive_any;
     if (deflatedOnly) {
@@ -269,7 +260,6 @@ MultiFormatArchive* OpenRarArchive(IStream* stream) {
     auto* archive = new MultiFormatArchive(ar_open_rar_archive, MultiFormatArchive::Format::Rar);
     return open(archive, stream);
 }
-#endif
 
 // TODO: set include path to ext/ dir
 #include "../../ext/unrar/dll.hpp"
@@ -394,7 +384,7 @@ bool MultiFormatArchive::OpenUnrarFallback(const char* rarPathUtf) {
         i->fileSizeUncompressed = (size_t)rarHeader.UnpSize;
         i->filePos = 0;
         i->fileTime = (i64)rarHeader.FileTime;
-        i->name = Allocator::AllocString(&allocator_, name.Get());
+        i->name = str::Dup(&allocator_, name.Get());
         fileInfos_.Append(i);
 
         fileId++;
@@ -404,7 +394,6 @@ bool MultiFormatArchive::OpenUnrarFallback(const char* rarPathUtf) {
 
     RARCloseArchive(hArc);
 
-    auto tmp = Allocator::AllocString(&allocator_, rarPathUtf);
-    rarFilePath_ = tmp.data();
+    rarFilePath_ = str::Dup(&allocator_, rarPathUtf);
     return true;
 }

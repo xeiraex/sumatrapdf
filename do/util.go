@@ -81,11 +81,6 @@ func fileSizeMust(path string) int64 {
 	return size
 }
 
-func pathExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
 func removeDirMust(dir string) {
 	err := os.RemoveAll(dir)
 	panicIfErr(err)
@@ -232,8 +227,11 @@ func validateRune(c rune) byte {
 	if c >= '0' && c <= '9' {
 		return byte(c)
 	}
-	if c == '-' || c == '_' || c == '.' {
+	if c == '-' || c == '_' {
 		return byte(c)
+	}
+	if c == '.' {
+		return '-'
 	}
 	if c == ' ' {
 		return '-'

@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -166,7 +166,7 @@ static void FillResultRects(TextSelection* ts, int pageNo, int glyph, int length
         }
 
         if (lines) {
-            lines->Append(str::DupN(text + (c0 - coords), c - c0));
+            lines->Append(str::Dup(text + (c0 - coords), c - c0));
             continue;
         }
 

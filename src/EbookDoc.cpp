@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -39,7 +39,7 @@ static uint GetCodepageFromPI(const char* xmlPI) {
         return CP_ACP;
     }
 
-    AutoFree encoding(str::DupN(enc->val, enc->valLen));
+    AutoFree encoding(str::Dup(enc->val, enc->valLen));
     struct {
         const char* namePart;
         uint codePage;
@@ -91,8 +91,8 @@ static char* DecodeTextToUtf8(const char* s, bool isXML = false) {
         s = tmp;
     }
     if (str::StartsWith(s, UTF16_BOM)) {
-        auto tmp2 = strconv::WstrToUtf8((WCHAR*)(s + 2));
-        return (char*)tmp2.data();
+        char* tmp2 = strconv::WstrToUtf8((WCHAR*)(s + 2));
+        return tmp2;
     }
     if (str::StartsWith(s, UTF8_BOM)) {
         return str::Dup(s + 3);
@@ -104,7 +104,7 @@ static char* DecodeTextToUtf8(const char* s, bool isXML = false) {
     if (CP_ACP == codePage) {
         codePage = GuessTextCodepage(s, str::Len(s), CP_ACP);
     }
-    auto tmp2 = strconv::ToMultiByte(s, codePage, CP_UTF8);
+    auto tmp2 = strconv::ToMultiByteV(s, codePage, CP_UTF8);
     return (char*)tmp2.data();
 }
 
@@ -128,7 +128,7 @@ char* NormalizeURL(const char* url, const char* base) {
     } else {
         baseEnd = base;
     }
-    AutoFree basePath(str::DupN(base, baseEnd - base));
+    AutoFree basePath(str::Dup(base, baseEnd - base));
     AutoFree norm(str::Join(basePath, url));
 
     char* dst = norm;
@@ -399,7 +399,7 @@ bool EpubDoc::Load() {
             // load the image lazily
             ImageData2 data = {0};
             auto tmp = strconv::WstrToUtf8(imgPath);
-            data.fileName = (char*)tmp.data();
+            data.fileName = tmp;
             data.fileId = zip->GetFileId(data.fileName);
             images.Append(data);
         } else if (isHtmlMediaType(mediatype)) {
@@ -640,12 +640,12 @@ bool EpubDoc::ParseNavToc(const char* data, size_t dataLen, const char* pagePath
             if (Tag_A == tok->tag) {
                 AttrInfo* attrInfo = tok->GetAttrByName("href");
                 if (attrInfo) {
-                    href.Set(str::DupN(attrInfo->val, attrInfo->valLen));
+                    href.Set(str::Dup(attrInfo->val, attrInfo->valLen));
                 }
             }
             while ((tok = parser.Next()) != nullptr && !tok->IsError() && (!tok->IsEndTag() || itemTag != tok->tag)) {
                 if (tok->IsText()) {
-                    AutoFree part(str::DupN(tok->s, tok->sLen));
+                    AutoFree part(str::Dup(tok->s, tok->sLen));
                     if (!text) {
                         text.Set(part.Release());
                     } else {
@@ -708,7 +708,7 @@ bool EpubDoc::ParseNcxToc(const char* data, size_t dataLen, const char* pagePath
         } else if (tok->IsTag() && !tok->IsEndTag() && tok->NameIsNS("content", EPUB_NCX_NS)) {
             AttrInfo* attrInfo = tok->GetAttrByName("src");
             if (attrInfo) {
-                AutoFree src(str::DupN(attrInfo->val, attrInfo->valLen));
+                AutoFree src(str::Dup(attrInfo->val, attrInfo->valLen));
                 src.Set(NormalizeURL(src, pagePath));
                 itemSrc.Set(strconv::FromHtmlUtf8(src, str::Len(src)));
             }
@@ -935,7 +935,7 @@ bool Fb2Doc::Load() {
             if (tok && tok->IsEmptyElementEndTag() && Tag_Image == tok->tag) {
                 AttrInfo* attr = tok->GetAttrByNameNS("href", FB2_XLINK_NS);
                 if (attr) {
-                    coverImage.Set(str::DupN(attr->val, attr->valLen));
+                    coverImage.Set(str::Dup(attr->val, attr->valLen));
                 }
             }
         } else if (inTitleInfo || inDocInfo) {
@@ -956,7 +956,7 @@ void Fb2Doc::ExtractImage(HtmlPullParser* parser, HtmlToken* tok) {
     AutoFree id;
     AttrInfo* attrInfo = tok->GetAttrByNameNS("id", FB2_MAIN_NS);
     if (attrInfo) {
-        id.Set(str::DupN(attrInfo->val, attrInfo->valLen));
+        id.Set(str::Dup(attrInfo->val, attrInfo->valLen));
         url::DecodeInPlace(id);
     }
 
@@ -1180,7 +1180,7 @@ bool PalmDoc::Load() {
 
     std::span<u8> text = mobiDoc->GetHtmlData();
     uint codePage = GuessTextCodepage((const char*)text.data(), text.size(), CP_ACP);
-    AutoFree textUtf8(strconv::ToMultiByte((const char*)text.data(), codePage, CP_UTF8));
+    AutoFree textUtf8(strconv::ToMultiByteV((const char*)text.data(), codePage, CP_UTF8));
 
     const char* start = textUtf8.Get();
     const char* end = start + textUtf8.size();
@@ -1262,7 +1262,7 @@ bool HtmlDoc::Load() {
         return false;
     }
 
-    pagePath.Set(strconv::WstrToUtf8(fileName).data());
+    pagePath.Set(strconv::WstrToUtf8(fileName));
     str::TransChars(pagePath, "\\", "/");
 
     HtmlPullParser parser(htmlData.AsSpan());

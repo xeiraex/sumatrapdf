@@ -22,7 +22,6 @@ function makelzsa_files()
     "StrconvUtil.*",
     "StringViewUtil.*",
     "StrUtil.*",
-    "StrUtil_win.*",
     "Log.*",
     "WinDynCalls.*",
     "WinUtil.*",
@@ -280,7 +279,7 @@ function libjpeg_turbo_files()
     })
     files {"ext/libjpeg-turbo/simd/jsimd_i386.c"}
 
-  filter {'platforms:x64 or x64_asan or x64_ramicro'}
+  filter {'platforms:x64 or x64_asan'}
     files_in_dir("ext/libjpeg-turbo/simd", {
       "jfsseflt-64.asm", "jccolss2-64.asm", "jdcolss2-64.asm", "jcgrass2-64.asm",
     	"jcsamss2-64.asm", "jdsamss2-64.asm", "jdmerss2-64.asm", "jcqnts2i-64.asm",
@@ -424,6 +423,7 @@ function sumatrapdf_files()
     "Installer.cpp",
     "InstUninstCommon.cpp",
     "Uninstaller.cpp",
+    "MemLeakDetect.*",
     "Menu.*",
     "MuiEbookPageDef.*",
     "Notifications.*",
@@ -455,10 +455,9 @@ function sumatrapdf_files()
     "TextSearch.*",
     "TextSelection.*",
     "Theme.*",
-    "TocEditor.*",
-    "TocEditTitle.*",
     "Toolbar.*",
     "Translations.*",
+    "Translations2.*",
     "Trans_sumatra_txt.cpp",
     "Version.h",
     "WindowInfo.*",
@@ -467,9 +466,25 @@ function sumatrapdf_files()
     "regress/Regress.*",
     "*.txt",
   })
-  test_app_files()
+  files_in_dir("docs", {
+    "releasenotes.txt",
+  })
+  filter {"configurations:Debug"}
+  files_in_dir("src/testcode", {
+    "test-app.h",
+    "TestApp.cpp",
+    "TestTab.cpp",
+    "TestLayout.cpp",
+    --"TestLice.cpp",
+  })
+  files_in_dir("src/utils/tests", {
+    "*.cpp",
+  })
+  files_in_dir("src/utils", {
+      "UtAssert.*",
+  })
+  filter {}
 end
-
 
 function uia_files()
   files_in_dir("src/uia", {
@@ -514,6 +529,7 @@ function utils_files()
     "Log.*",
     "LogDbg.*",
     "LzmaSimpleArchive.*",
+    "MinHook.*",
     "PEB.h",
     "RegistryPaths.*",
     "Scoped.h",
@@ -526,7 +542,7 @@ function utils_files()
     "StringViewUtil.*",
     "StrSlice.*",
     "StrUtil.*",
-    "StrUtil_win.cpp",
+    "TempAllocator.*",
     "ThreadUtil.*",
     "TgaReader.*",
     "TrivialHtmlParser.*",
@@ -590,7 +606,7 @@ function mupdf_files()
 
   files { "ext/mupdf_load_system_font.c" }
 
-  filter {"platforms:x64 or x64_asan or x64_ramicro"}
+  filter {"platforms:x64 or x64_asan"}
     files {
       "mupdf/fonts_64.asm",
     }
@@ -661,6 +677,7 @@ function mupdf_files()
     "geometry.c",
     "getopt.c",
     "glyph.c",
+    "glyphbox.c",
     "halftone.c",
     "harfbuzz.c",
     "hash.c",
@@ -673,7 +690,8 @@ function mupdf_files()
     "load-jbig2.c",
     "load-jpeg.c",
     "load-jpx.c",
-    "load-jxr.c",
+    -- "load-jxr.c",
+    "load-jxr-win.c",
     "load-png.c",
     "load-pnm.c",
     "load-tiff.c",
@@ -686,6 +704,7 @@ function mupdf_files()
     "output-cbz.c",
     "output-pcl.c",
     "output-pclm.c",
+    "output-pdfocr.c",
     "output-png.c",
     "output-pnm.c",
     "output-ps.c",
@@ -756,6 +775,7 @@ function mupdf_files()
     "pdf-interpret.c",
     "pdf-js.c",
     "pdf-layer.c",
+    "pdf-layout.c",
     "pdf-lex.c",
     "pdf-link.c",
     "pdf-metrics.c",
@@ -781,6 +801,7 @@ function mupdf_files()
     "pdf-write.c",
     "pdf-xobject.c",
     "pdf-xref.c",
+    "*.h",
   })
 
   files_in_dir("mupdf/source/svg", {
@@ -803,6 +824,9 @@ function mupdf_files()
     "xps-tile.c",
     "xps-util.c",
     "xps-zip.c",
+  })
+  files_in_dir("mupdf/source/reflow", {
+    "*.c",
   })
   files {
     "mupdf/include/mupdf/fitz/*.h",
@@ -873,7 +897,6 @@ function efi_files()
     "src/utils/BitManip.h",
     "src/utils/Dict*",
     "src/utils/StrUtil.*",
-    "src/utils/StrUtil_win.cpp",
   }
 end
 
@@ -901,9 +924,9 @@ function test_util_files()
     "StrFormat.*",
     "StringViewUtil.*",
     "StrUtil.*",
-    "StrUtil_win.cpp",
     "SquareTreeParser.*",
     "TrivialHtmlParser.*",
+    "TempAllocator.*",
     "UtAssert.*",
     --"VarintGob*",
     "Vec.*",
@@ -919,7 +942,7 @@ function test_util_files()
     "Flags.*",
     "SumatraConfig.*",
     "SettingsStructs.*",
-    "UnitTests.cpp",
+    "SumatraUnitTests.cpp",
     "mui/SvgPath*",
     "tools/test_util.cpp"
   })
@@ -951,6 +974,7 @@ function pdf_preview_files()
     "EngineBase.*",
     "EngineFzUtil.*",
     "EnginePdf.*",
+    "EnginePdfImpl.*",
     "EngineXps.*",
     "ChmDoc.*",
     "EbookDoc.*",
@@ -985,8 +1009,8 @@ function pdf_filter_files()
 
   filter {"configurations:Debug"}
     files_in_dir("src/ifilter", {
-      "CTeXFilter.*",
-      "CEpubFilter.*",
+      "TeXFilter.*",
+      "EpubFilter.*",
     })
     files {
       "src/EbookDoc.*",
@@ -996,16 +1020,8 @@ function pdf_filter_files()
   filter {}
 end
 
-function test_app_files()
-  files_in_dir("src/testcode", {
-    "test-app.h",
-    "TestApp.cpp",
-    "TestTab.cpp",
-    "TestLayout.cpp",
-    "TestLice.cpp",
-  })
-end
 
+--[[
 function wdl_files()
   files_in_dir("ext/WDL", {
     "projectcontext.cpp",
@@ -1061,6 +1077,7 @@ function wdl_files()
     "wndsize.*",
   })
 end
+--]]
 
 function gumbo_files()
   files_in_dir("ext/gumbo-parser/src", {

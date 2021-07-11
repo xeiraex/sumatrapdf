@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -33,7 +33,7 @@
 #include "EbookControls.h"
 #include "Translations.h"
 
-static const WCHAR* GetFontName() {
+static const char* GetFontName() {
     // TODO: validate the name?
     return gGlobalPrefs->ebookUI.fontName;
 }
@@ -49,7 +49,8 @@ static float GetFontSize() {
 HtmlFormatterArgs* CreateFormatterArgsDoc(const Doc& doc, int dx, int dy, Allocator* textAllocator) {
     HtmlFormatterArgs* args = CreateFormatterDefaultArgs(dx, dy, textAllocator);
     args->htmlStr = doc.GetHtmlData();
-    args->SetFontName(GetFontName());
+    AutoFreeWstr fontName = strconv::Utf8ToWstr(GetFontName());
+    args->SetFontName(fontName.Get());
     args->fontSize = GetFontSize();
     return args;
 }
@@ -417,7 +418,7 @@ void EbookController::OnClickedLink(int pageNo, DrawInstr* link) {
             for (size_t k = 0; k < std::min((size_t)2, p->instructions.size()); k++) {
                 DrawInstr& di = p->instructions.at(k);
                 if (DrawInstrType::Anchor == di.type && str::StartsWith(di.str.s + di.str.len, "\" page_marker />")) {
-                    AutoFree basePath(str::DupN(di.str.s, di.str.len));
+                    AutoFree basePath(str::Dup(di.str.s, di.str.len));
                     AutoFree relPath(ResolveHtmlEntities(link->str.s, link->str.len));
                     AutoFree absPath(NormalizeURL(relPath, basePath));
                     url.Set(strconv::Utf8ToWstr(absPath.Get()));
@@ -759,7 +760,7 @@ int EbookController::ResolvePageAnchor(const WCHAR* id) {
         return -1;
     }
 
-    AutoFreeWstr chapterPath(str::DupN(id, str::FindChar(id, '#') - id));
+    AutoFreeWstr chapterPath(str::Dup(id, str::FindChar(id, '#') - id));
     idx = pageAnchorIds->Find(chapterPath);
     if (idx != -1) {
         return pageAnchorIdxs->at(idx);
@@ -872,19 +873,19 @@ int EbookController::CurrentTocPageNo() const {
     return currPageReparseIdx + 1;
 }
 
-void EbookController::GetDisplayState(DisplayState* ds) {
+void EbookController::GetDisplayState(FileState* ds) {
     if (!ds->filePath || !str::EqI(ds->filePath, doc.GetFilePath())) {
-        str::ReplacePtr(&ds->filePath, doc.GetFilePath());
+        str::ReplaceWithCopy(&ds->filePath, doc.GetFilePath());
     }
 
     ds->useDefaultState = !gGlobalPrefs->rememberStatePerDocument;
 
-    // don't modify any of the other DisplayState values
+    // don't modify any of the other FileState values
     // as long as they're not used, so that the same
-    // DisplayState settings can also be used for EngineEbook;
-    // we get reasonable defaults from DisplayState's constructor anyway
+    // FileState settings can also be used for EngineEbook;
+    // we get reasonable defaults from FileState's constructor anyway
     ds->reparseIdx = currPageReparseIdx;
-    str::ReplacePtr(&ds->displayMode, DisplayModeToString(GetDisplayMode()));
+    str::ReplaceWithCopy(&ds->displayMode, DisplayModeToString(GetDisplayMode()));
 }
 
 void EbookController::SetViewPortSize([[maybe_unused]] Size size) {

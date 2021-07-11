@@ -379,10 +379,38 @@ static void on_timer(int timer_id)
 	glutTimerFunc(500, on_timer, 0);
 }
 
+void ui_init_dpi(float override_scale)
+{
+	ui.scale = 1;
+
+	if (override_scale)
+	{
+		ui.scale = override_scale;
+	}
+	else
+	{
+		int wmm = glutGet(GLUT_SCREEN_WIDTH_MM);
+		int wpx = glutGet(GLUT_SCREEN_WIDTH);
+		int hmm = glutGet(GLUT_SCREEN_HEIGHT_MM);
+		int hpx = glutGet(GLUT_SCREEN_HEIGHT);
+		if (wmm > 0 && hmm > 0)
+		{
+			float ppi = ((wpx * 254) / wmm + (hpx * 254) / hmm) / 20;
+			if (ppi >= 288) ui.scale = 3;
+			else if (ppi >= 192) ui.scale = 2;
+			else if (ppi >= 144) ui.scale = 1.5f;
+		}
+	}
+
+	ui.fontsize = DEFAULT_UI_FONTSIZE * ui.scale;
+	ui.baseline = DEFAULT_UI_BASELINE * ui.scale;
+	ui.lineheight = DEFAULT_UI_LINEHEIGHT * ui.scale;
+	ui.gridsize = DEFAULT_UI_GRIDSIZE * ui.scale;
+	ui.padsize = 2 * ui.scale;
+}
+
 void ui_init(int w, int h, const char *title)
 {
-	float ui_scale;
-
 #ifdef FREEGLUT
 	glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
 #endif
@@ -414,26 +442,6 @@ void ui_init(int w, int h, const char *title)
 		fz_warn(ctx, "OpenGL implementation does not support non-power of two texture sizes");
 
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
-
-	ui_scale = 1;
-	{
-		int wmm = glutGet(GLUT_SCREEN_WIDTH_MM);
-		int wpx = glutGet(GLUT_SCREEN_WIDTH);
-		int hmm = glutGet(GLUT_SCREEN_HEIGHT_MM);
-		int hpx = glutGet(GLUT_SCREEN_HEIGHT);
-		if (wmm > 0 && hmm > 0)
-		{
-			float ppi = ((wpx * 254) / wmm + (hpx * 254) / hmm) / 20;
-			if (ppi >= 144) ui_scale = 1.5f;
-			if (ppi >= 192) ui_scale = 2.0f;
-			if (ppi >= 288) ui_scale = 3.0f;
-		}
-	}
-
-	ui.fontsize = DEFAULT_UI_FONTSIZE * ui_scale;
-	ui.baseline = DEFAULT_UI_BASELINE * ui_scale;
-	ui.lineheight = DEFAULT_UI_LINEHEIGHT * ui_scale;
-	ui.gridsize = DEFAULT_UI_GRIDSIZE * ui_scale;
 
 	ui_init_fonts();
 
@@ -688,8 +696,8 @@ void ui_panel_begin(int w, int h, int padx, int pady, int opaque)
 		glColorHex(UI_COLOR_PANEL);
 		glRectf(area.x0, area.y0, area.x1, area.y1);
 	}
-	area.x0 += padx; area.y0 += padx;
-	area.x1 -= pady; area.y1 -= pady;
+	area.x0 += padx; area.y0 += pady;
+	area.x1 -= padx; area.y1 -= pady;
 	ui_pack_push(area);
 }
 
@@ -758,14 +766,14 @@ int ui_button_aux(const char *label, int flags)
 
 	if (!disabled)
 	{
-	if (ui_mouse_inside(area))
-	{
-		ui.hot = label;
-		if (!ui.active && ui.down)
-			ui.active = label;
-	}
+		if (ui_mouse_inside(area))
+		{
+			ui.hot = label;
+			if (!ui.active && ui.down)
+				ui.active = label;
+		}
 
-	pressed = (ui.hot == label && ui.active == label && ui.down);
+		pressed = (ui.hot == label && ui.active == label && ui.down);
 	}
 	ui_draw_bevel_rect(area, UI_COLOR_BUTTON, pressed);
 	glColorHex(disabled ? UI_COLOR_TEXT_GRAY : UI_COLOR_TEXT_FG);
@@ -792,17 +800,17 @@ int ui_checkbox_aux(const char *label, int *value, int flags)
 
 	if (!disabled)
 	{
-	if (ui_mouse_inside(area))
-	{
-		ui.hot = label;
-		if (!ui.active && ui.down)
-			ui.active = label;
-	}
+		if (ui_mouse_inside(area))
+		{
+			ui.hot = label;
+			if (!ui.active && ui.down)
+				ui.active = label;
+		}
 
-	if (ui.hot == label && ui.active == label && !ui.down)
-		*value = !*value;
+		if (ui.hot == label && ui.active == label && !ui.down)
+			*value = !*value;
 
-	pressed = (ui.hot == label && ui.active == label && ui.down);
+		pressed = (ui.hot == label && ui.active == label && ui.down);
 	}
 	ui_draw_bevel_rect(mark, (disabled || pressed) ? UI_COLOR_PANEL : UI_COLOR_TEXT_BG, 1);
 	if (*value)
@@ -994,6 +1002,16 @@ void ui_tree_begin(struct list *list, int count, int req_w, int req_h, int is_tr
 	if (ui.hot == list)
 		list->scroll_y -= ui.scroll_y * ui.lineheight * 3;
 
+	/* keyboard keys */
+	if (ui.hot == list && ui.key == KEY_HOME)
+		list->scroll_y = 0;
+	if (ui.hot == list && ui.key == KEY_END)
+		list->scroll_y = max_scroll_y;
+	if (ui.hot == list && ui.key == KEY_PAGE_UP)
+		list->scroll_y -= ((area.y1 - area.y0) / ui.lineheight) * ui.lineheight;
+	if (ui.hot == list && ui.key == KEY_PAGE_DOWN)
+		list->scroll_y += ((area.y1 - area.y0) / ui.lineheight) * ui.lineheight;
+
 	/* clamp scrolling to client area */
 	if (list->scroll_y >= max_scroll_y)
 		list->scroll_y = max_scroll_y;
@@ -1127,14 +1145,14 @@ int ui_popup_aux(const void *id, const char *label, int is_button, int count, in
 
 	if (!disabled)
 	{
-	if (ui_mouse_inside(area))
-	{
-		ui.hot = id;
-		if (!ui.active && ui.down)
-			ui.active = id;
-	}
+		if (ui_mouse_inside(area))
+		{
+			ui.hot = id;
+			if (!ui.active && ui.down)
+				ui.active = id;
+		}
 
-	pressed = (ui.active == id);
+		pressed = (ui.active == id);
 	}
 
 	if (is_button)

@@ -1,4 +1,4 @@
-/* Copyright 2020 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -172,7 +172,7 @@ void PageControl::NotifyMouseMove(int x, int y) {
         SetCursorCached(IDC_ARROW);
         if (toolTip) {
             Control::NotifyMouseLeave();
-            str::ReplacePtr(&toolTip, nullptr);
+            str::ReplaceWithCopy(&toolTip, nullptr);
         }
         return;
     }
@@ -181,7 +181,7 @@ void PageControl::NotifyMouseMove(int x, int y) {
     AutoFreeWstr url(strconv::FromHtmlUtf8(link->str.s, link->str.len));
     if (toolTip && (!url::IsAbsolute(url) || !str::Eq(toolTip, url))) {
         Control::NotifyMouseLeave();
-        str::ReplacePtr(&toolTip, nullptr);
+        str::ReplaceWithCopy(&toolTip, nullptr);
     }
     if (!toolTip && url::IsAbsolute(url)) {
         toolTip = url.StealData();
@@ -295,9 +295,9 @@ void SetMainWndBgCol(EbookControls* ctrls) {
         return;
     }
     u8 r, g, b;
-    UnpackRgb(bgColor, r, g, b);
+    UnpackColor(bgColor, r, g, b);
     u8 rt, gt, bt;
-    UnpackRgb(txtColor, rt, gt, bt);
+    UnpackColor(txtColor, rt, gt, bt);
     styleMainWnd->Set(Prop::AllocColorSolid(PropBgColor, r, g, b));
     ctrls->mainWnd->SetStyle(styleMainWnd);
 
